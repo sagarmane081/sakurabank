@@ -1,6 +1,18 @@
 spring:
   application:
     name: core-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:sakurabank}
+    username: ${DB_USER:sakura}
+    password: ${DB_PASSWORD:sakura_local_dev}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: core
+  flyway:
+    default-schema: core
 
 server:
   port: 8080
@@ -13,8 +25,4 @@ management:
   endpoint:
     health:
       probes:
-        enabled: true   # /actuator/health/liveness + /readiness for deploy checks
-
-# Database wiring lands in Phase 1 together with JPA + Flyway.
-# Values will come from env vars only (DB_HOST, DB_USER, DB_PASSWORD via SSM in AWS).
-# Zero secrets in this file, ever — see SECURITY.md and gitleaks CI stage.
+        enabled: true

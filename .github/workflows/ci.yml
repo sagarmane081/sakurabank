@@ -42,6 +42,20 @@ jobs:
     needs: changes
     if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: sakura
+          POSTGRES_PASSWORD: sakura_local_dev
+          POSTGRES_DB: sakurabank
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sakura"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: core-service
@@ -53,7 +67,8 @@ jobs:
           java-version: "21"
           cache: maven
       # `verify` runs unit tests + JaCoCo report + the 80% service-layer
-      # coverage gate. Integration tests (Testcontainers) join in Phase 1.
+      # `verify` runs unit + integration tests against the service container
+      # Postgres above, plus the JaCoCo 80% service-layer coverage gate.
       - name: Build, test, coverage gate
         run: mvn -B verify
       - name: Upload coverage report
