@@ -1,0 +1,32 @@
+# --- secrets & local env (never commit; gitleaks enforces in CI) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Java / Maven ---
+target/
+*.class
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# --- Node / frontend (Phase 4) ---
+node_modules/
+dist/
+.vite/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.iml
+.DS_Store

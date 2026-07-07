@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sakurabank-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sakura}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sakura_local_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-sakurabank}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-sakura} -d $${POSTGRES_DB:-sakurabank}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: sakurabank-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  core-service:
+    build: ./core-service
+    container_name: sakurabank-core
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-sakurabank}
+      DB_USER: ${POSTGRES_USER:-sakura}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sakura_local_dev}
+      REDIS_HOST: redis
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ai-service:
+    build: ./ai-service
+    container_name: sakurabank-ai
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-sakurabank}
+      DB_USER: ${POSTGRES_USER:-sakura}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sakura_local_dev}
+      REDIS_HOST: redis
+      # ANTHROPIC_API_KEY intentionally NOT defaulted — export it in your shell.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  pgdata:
