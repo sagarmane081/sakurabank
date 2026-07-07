@@ -1,7 +1,6 @@
 # SakuraBank（サクラ銀行）
 
-<!-- Replace OWNER/REPO after pushing -->
-![CI](https://github.com/OWNER/sakurabank/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/sagarmane081/sakurabank/actions/workflows/ci.yml/badge.svg)
 
 A full-stack, enterprise-grade digital banking application: double-entry ledger,
 KYC/AML compliance engine, immutable audit log, and a Japanese-language RAG
