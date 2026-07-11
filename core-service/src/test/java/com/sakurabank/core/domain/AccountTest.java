@@ -3,6 +3,8 @@ package com.sakurabank.core.domain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
@@ -91,4 +93,82 @@ class AccountTest {
         assertThatThrownBy(account::freeze)
                 .isInstanceOf(InvalidAccountTransitionException.class);
     }
+
+    @Test
+    @DisplayName("Newly created account has balance zero")
+    void openAccountShouldHaveBalanceZero() {
+        Account account = new Account();
+
+        assertThat(account.getBalance()).isEqualByComparingTo (BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("Depositing increases the balance")
+    void depositAmountInActiveAccount() {
+        Account account = new Account();
+        account.activate();
+        account.deposit(new BigDecimal("100.50"));
+
+        assertThat(account.getBalance()).isEqualByComparingTo (new BigDecimal("100.50"));
+    }
+
+    @Test
+    @DisplayName("Double depositing the amount")
+    void doubleDepositAmountInAccount() {
+        Account account = new Account();
+        account.activate();
+        account.deposit(new BigDecimal("100.50"));
+        account.deposit(new BigDecimal("100.50"));
+
+        assertThat(account.getBalance()).isEqualByComparingTo (new BigDecimal("201.00"));
+    }
+
+    @Test
+    @DisplayName("Cannot deposit negative amount")
+    void cannotDepositNegativeAmountInAccount() {
+        Account account = new Account();
+        account.activate();
+
+        assertThatThrownBy(() -> account.deposit(new BigDecimal("-100.50")))
+                .isInstanceOf(InvalidAmountException.class);
+    }
+
+    @Test
+    @DisplayName("Cannot deposit zero amount")
+    void cannotDepositZeroAmountInAccount() {
+        Account account = new Account();
+        account.activate();
+
+        assertThatThrownBy(() -> account.deposit(BigDecimal.ZERO))
+                .isInstanceOf(InvalidAmountException.class);
+    }
+
+    @Test
+    @DisplayName("Cannot Deposit in open account")
+    void depositAmountInOpenAccount() {
+        Account account = new Account();
+
+        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50"))).isInstanceOf (InvalidAccountTransitionException.class);
+    }
+
+    @Test
+    @DisplayName("Cannot Deposit in frozen account")
+    void depositAmountInFrozenAccount() {
+        Account account = new Account();
+        account.activate();
+        account.freeze();
+
+        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50"))).isInstanceOf (InvalidAccountTransitionException.class);
+    }
+
+    @Test
+    @DisplayName("Cannot deposit in closed account")
+    void depositAmountInClosedAccount() {
+        Account account = new Account();
+        account.activate();
+        account.close();
+
+        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50"))).isInstanceOf (InvalidAccountTransitionException.class);
+    }
 }
+

@@ -1,8 +1,12 @@
 package com.sakurabank.core.domain;
 
+import java.math.BigDecimal;
+
 public class Account {
 
     private AccountStatus status =  AccountStatus.OPEN;
+    private BigDecimal balance = BigDecimal.ZERO;
+
     public AccountStatus getStatus() {
 
         return status;
@@ -27,5 +31,22 @@ public class Account {
             throw new InvalidAccountTransitionException(status, "close");
         }
         this.status = AccountStatus.CLOSED;
+    }
+
+    public BigDecimal getBalance() {
+        return balance;
+    }
+
+    public void deposit(BigDecimal amount) {
+
+        if (status != AccountStatus.ACTIVE) {
+            throw new InvalidAccountTransitionException(status, "deposit");
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidAmountException(amount);
+        }
+
+        this.balance = this.balance.add(amount);
     }
 }
