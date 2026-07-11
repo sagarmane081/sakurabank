@@ -128,9 +128,12 @@ class AccountTest {
     void cannotDepositNegativeAmountInAccount() {
         Account account = new Account();
         account.activate();
+        account.deposit(new BigDecimal("100.50"));
 
         assertThatThrownBy(() -> account.deposit(new BigDecimal("-100.50")))
                 .isInstanceOf(InvalidAmountException.class);
+
+        assertThat(account.getBalance()).isEqualByComparingTo (new BigDecimal("100.50"));
     }
 
     @Test
@@ -138,9 +141,13 @@ class AccountTest {
     void cannotDepositZeroAmountInAccount() {
         Account account = new Account();
         account.activate();
+        account.deposit(new BigDecimal("100.50"));
 
         assertThatThrownBy(() -> account.deposit(BigDecimal.ZERO))
                 .isInstanceOf(InvalidAmountException.class);
+
+        assertThat(account.getBalance()).isEqualByComparingTo (new BigDecimal("100.50"));
+
     }
 
     @Test
@@ -148,7 +155,10 @@ class AccountTest {
     void depositAmountInOpenAccount() {
         Account account = new Account();
 
-        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50"))).isInstanceOf (InvalidAccountTransitionException.class);
+        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50")))
+                .isInstanceOf (InvalidAccountTransitionException.class);
+
+        assertThat(account.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
@@ -156,9 +166,13 @@ class AccountTest {
     void depositAmountInFrozenAccount() {
         Account account = new Account();
         account.activate();
+        account.deposit(new BigDecimal("100.50"));
         account.freeze();
 
-        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50"))).isInstanceOf (InvalidAccountTransitionException.class);
+        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50")))
+                .isInstanceOf (InvalidAccountTransitionException.class);
+
+        assertThat(account.getBalance()).isEqualByComparingTo (new BigDecimal("100.50"));
     }
 
     @Test
@@ -166,9 +180,13 @@ class AccountTest {
     void depositAmountInClosedAccount() {
         Account account = new Account();
         account.activate();
+        account.deposit(new BigDecimal("100.50"));
         account.close();
 
-        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50"))).isInstanceOf (InvalidAccountTransitionException.class);
+        assertThatThrownBy(() -> account.deposit(new BigDecimal("100.50")))
+                .isInstanceOf (InvalidAccountTransitionException.class);
+
+        assertThat(account.getBalance()).isEqualByComparingTo (new BigDecimal("100.50"));
     }
 }
 
