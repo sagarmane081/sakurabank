@@ -1,16 +1,41 @@
 package com.sakurabank.core.domain;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+@Entity
+@Table(name = "ledger_entries", schema = "core")
+
 public class LedgerEntry {
 
-    private final UUID txId;
-    private final UUID accountId;
-    private final EntryType entryType;
-    private final BigDecimal amount;
+    @Id
+    @GeneratedValue
+    private UUID id;                      // ← NEW: the row's own primary key
+
+    @Column(name = "transaction_id", nullable = false)
+    private UUID txId;
+
+    @Column(name = "account_id", nullable = false)
+    private UUID accountId;
+
+    @Enumerated(EnumType.STRING)          // store "DEBIT"/"CREDIT" as text, not 0/1
+    @Column(name = "entry_type", nullable = false)
+    private EntryType entryType;
+
+    @Column(nullable = false)
+    private BigDecimal amount;
+
+    protected LedgerEntry() {}
 
     public LedgerEntry(UUID txId, UUID accountId, EntryType entryType, BigDecimal amount) {
 
@@ -27,6 +52,10 @@ public class LedgerEntry {
         this.accountId = accountId;
         this.entryType = entryType;
         this.amount = amount;
+    }
+
+    public UUID getId() {
+        return id;
     }
 
     public UUID getTxId() {
