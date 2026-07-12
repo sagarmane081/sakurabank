@@ -1,6 +1,7 @@
 package com.sakurabank.core.domain;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -41,5 +42,26 @@ public class LedgerEntry {
     }
     public BigDecimal getAmount() {
         return amount;
+    }
+
+    public static List<LedgerEntry> transferPair(UUID debitAccountId, UUID creditAccountId, BigDecimal amount){
+
+        UUID txId = UUID.randomUUID();
+
+        LedgerEntry debit =
+                new LedgerEntry(
+                        txId,
+                        debitAccountId,
+                        EntryType.DEBIT,
+                        amount);
+
+        LedgerEntry credit =
+                new LedgerEntry(
+                        txId,
+                        creditAccountId,
+                        EntryType.CREDIT,
+                        amount);
+
+        return List.of(debit, credit);
     }
 }

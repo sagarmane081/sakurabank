@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -111,5 +112,59 @@ class LedgerEntryTest {
                         null
                 )
         ).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("Transfer pair creates matching debit and credit entries")
+    void transferPairCreatesMatchingDebitAndCreditEntries() {
+
+        UUID fromAccountId = UUID.randomUUID();
+        UUID toAccountId = UUID.randomUUID();
+
+        List<LedgerEntry> pair = LedgerEntry.transferPair(
+                fromAccountId, toAccountId, new BigDecimal("100.50"));
+
+        assertThat(pair).hasSize(2);
+
+        LedgerEntry debit = pair.get(0);
+        LedgerEntry credit = pair.get(1);
+
+        assertThat(debit.getEntryType()).isEqualTo(EntryType.DEBIT);
+        assertThat(credit.getEntryType()).isEqualTo(EntryType.CREDIT);
+
+        assertThat(debit.getAccountId()).isEqualTo(fromAccountId);
+        assertThat(credit.getAccountId()).isEqualTo(toAccountId);
+
+        assertThat(debit.getAmount())
+                .isEqualByComparingTo(new BigDecimal("100.50"));
+
+        assertThat(credit.getAmount())
+                .isEqualByComparingTo(new BigDecimal("100.50"));
+
+        assertThat(debit.getTxId())
+                .isEqualTo(credit.getTxId());
+    }
+
+    @Test
+    @DisplayName("Each transfer pair receives a fresh transaction ID")
+    void transferPairGetsFreshTransactionId() {
+
+        UUID from = UUID.randomUUID();
+        UUID to = UUID.randomUUID();
+
+        List<LedgerEntry> pair1 =
+                LedgerEntry.transferPair(
+                        from,
+                        to,
+                        new BigDecimal("100.50"));
+
+        List<LedgerEntry> pair2 =
+                LedgerEntry.transferPair(
+                        from,
+                        to,
+                        new BigDecimal("100.50"));
+
+        assertThat(pair1.getFirst().getTxId())
+                .isNotEqualTo(pair2.getFirst().getTxId());
     }
 }
