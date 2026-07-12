@@ -167,4 +167,19 @@ class LedgerEntryTest {
         assertThat(pair1.getFirst().getTxId())
                 .isNotEqualTo(pair2.getFirst().getTxId());
     }
+
+    @Test
+    @DisplayName("Transfer pair cannot use the same account twice")
+    void transferPairCannotUseSameAccount() {
+
+        UUID accountId = UUID.randomUUID();
+
+        assertThatThrownBy(() ->
+                LedgerEntry.transferPair(
+                        accountId,
+                        accountId,
+                        new BigDecimal("100.50")
+                )
+        ).isInstanceOf(InvalidTransferException.class);
+    }
 }

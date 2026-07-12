@@ -46,6 +46,13 @@ public class LedgerEntry {
 
     public static List<LedgerEntry> transferPair(UUID debitAccountId, UUID creditAccountId, BigDecimal amount){
 
+        Objects.requireNonNull(debitAccountId, "debitAccountId must not be null");
+        Objects.requireNonNull(creditAccountId, "creditAccountId must not be null");
+
+        if (debitAccountId.equals(creditAccountId)) {
+            throw new InvalidTransferException(debitAccountId);
+        }
+
         UUID txId = UUID.randomUUID();
 
         LedgerEntry debit =
