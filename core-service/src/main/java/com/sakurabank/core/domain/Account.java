@@ -1,15 +1,40 @@
 package com.sakurabank.core.domain;
 
+import jakarta.persistence.*;
+
 import java.math.BigDecimal;
 import java.util.Objects;
+import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+@Entity
+@Table(name = "accounts", schema = "core")
 
 public class Account {
 
-    private AccountStatus status =  AccountStatus.OPEN;
+    @Id
+    @GeneratedValue
+    private UUID id;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private AccountStatus status = AccountStatus.OPEN;
+
+    @Column(name = "balance", nullable = false)
     private BigDecimal balance = BigDecimal.ZERO;
-    private final String accountNumber;
-    private final String ownerName;
+
+    @Column(name = "account_number", nullable = false)
+    private String accountNumber;
+
+    @Column(name = "owner_name", nullable = false)
+    private String ownerName;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "currency", nullable = false, length = 3)
     private String currency;
+
+    protected Account() {}
 
     public Account(String accountNumber, String ownerName) {
 
@@ -38,6 +63,10 @@ public class Account {
         this.accountNumber = accountNumber;
         this.ownerName = ownerName;
         this.currency = "JPY";
+    }
+
+    public UUID getId() {
+        return id;
     }
 
     public String getAccountNumber() {
