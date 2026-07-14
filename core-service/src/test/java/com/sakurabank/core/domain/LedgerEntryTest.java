@@ -1,5 +1,6 @@
 package com.sakurabank.core.domain;
 
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -181,5 +182,38 @@ class LedgerEntryTest {
                         new BigDecimal("100.50")
                 )
         ).isInstanceOf(InvalidTransferException.class);
+    }
+
+
+    @Test
+    @DisplayName("Transfer pair cannot have null debit account ID")
+    void transferPairCannotHaveNullDebitAccountId() {
+
+        UUID creditAccountId = UUID.randomUUID();
+
+        Assertions.assertThatThrownBy(() ->
+                LedgerEntry.transferPair(
+                        null,
+                        creditAccountId,
+                        new BigDecimal("100.50")
+                )
+        ).isInstanceOf(NullPointerException.class).
+                hasMessage("debitAccountId must not be null");
+    }
+
+    @Test
+    @DisplayName("Transfer pair cannot have null credit account ID")
+    void transferPairCannotHaveNullCreditAccountId() {
+
+        UUID debitAccountId = UUID.randomUUID();
+
+        Assertions.assertThatThrownBy(() ->
+                LedgerEntry.transferPair(
+                        debitAccountId,
+                        null,
+                        new BigDecimal("100.50")
+                )
+        ).isInstanceOf(NullPointerException.class).
+                hasMessage("creditAccountId must not be null");
     }
 }
