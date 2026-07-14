@@ -1,5 +1,6 @@
 package com.sakurabank.core.repository;
 
+import com.sakurabank.core.domain.Account;
 import com.sakurabank.core.domain.EntryType;
 import com.sakurabank.core.domain.LedgerEntry;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,11 +8,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,42 +21,33 @@ class LedgerEntryRepositoryTest {
     private LedgerEntryRepository repository;
 
     @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private AccountRepository accountRepository;
 
     @BeforeEach
     void cleanUp() {
         repository.deleteAll();
-        jdbcTemplate.update("DELETE FROM core.accounts");
+        accountRepository.deleteAll();
     }
 
     @Test
     @DisplayName("A ledger entry survives a round trip to the database")
     void entrySurvivesRoundTrip() {
 
-        UUID from = UUID.randomUUID();
-        UUID to = UUID.randomUUID();
+        Account sourceAccount =
+                accountRepository.save(
+                        new Account("ACC-001", "Source Account")
+                );
 
-        jdbcTemplate.update(
-                "INSERT INTO core.accounts (id, account_number, owner_name, status) VALUES (?, ?, ?, ?)",
-                from,
-                "ACC-001",
-                "Source Account",
-                "ACTIVE"
-        );
-
-        jdbcTemplate.update(
-                "INSERT INTO core.accounts (id, account_number, owner_name, status) VALUES (?, ?, ?, ?)",
-                to,
-                "ACC-002",
-                "Destination Account",
-                "ACTIVE"
-        );
+        Account destinationAccount =
+                accountRepository.save(
+                        new Account("ACC-002", "Destination Account")
+                );
 
         List<LedgerEntry> pair =
                 LedgerEntry.transferPair(
-                        from,
-                        to,
-                        new BigDecimal("100.50")
+                        sourceAccount.getId(),
+                        destinationAccount.getId(),
+                        new BigDecimal("100.00")
                 );
 
         repository.saveAll(pair);
