@@ -123,4 +123,22 @@ public class Account {
 
         this.balance = this.balance.add(amount);
     }
+
+    public void withdraw(BigDecimal amount) {
+
+        if (status != AccountStatus.ACTIVE) {
+            throw new InvalidAccountTransitionException(status, "withdraw"
+            );
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidAmountException(amount);
+        }
+
+        if (amount.compareTo(balance) > 0) {
+            throw new InsufficientFundsException(amount, balance);
+        }
+
+        this.balance = this.balance.subtract(amount);
+    }
 }

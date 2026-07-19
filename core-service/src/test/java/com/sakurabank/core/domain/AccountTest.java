@@ -264,5 +264,150 @@ class AccountTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("ownerName must not be blank");
     }
+
+    @Test
+    @DisplayName("Withdrawing decreases the balance")
+    void withdrawingDecreasesTheBalance() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+
+        account.withdraw(new BigDecimal("40.00"));
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("60.00"));
+    }
+
+    @Test
+    @DisplayName("Multiple withdrawals accumulate")
+    void multipleWithdrawalsAccumulate() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+
+        account.withdraw(new BigDecimal("30.00"));
+        account.withdraw(new BigDecimal("20.00"));
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+    }
+
+    @Test
+    @DisplayName("Withdrawing the exact balance leaves zero")
+    void withdrawingExactBalanceLeavesZero() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+
+        account.withdraw(new BigDecimal("100.00"));
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("Withdrawal exceeding balance throws and leaves balance unchanged")
+    void withdrawalExceedingBalanceThrowsAndLeavesBalanceUnchanged() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() ->
+                account.withdraw(new BigDecimal("150.00"))
+        )
+                .isInstanceOf(InsufficientFundsException.class);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    @DisplayName("Cannot withdraw negative amount")
+    void cannotWithdrawNegativeAmount() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() ->
+                account.withdraw(new BigDecimal("-10.00"))
+        )
+                .isInstanceOf(InvalidAmountException.class);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    @DisplayName("Cannot withdraw from OPEN account")
+    void cannotWithdrawFromOpenAccount() {
+
+        Account account = newAccount();
+
+        assertThatThrownBy(() ->
+                account.withdraw(new BigDecimal("10.00"))
+        )
+                .isInstanceOf(InvalidAccountTransitionException.class);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("Cannot withdraw from FROZEN account")
+    void cannotWithdrawFromFrozenAccount() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+        account.freeze();
+
+        assertThatThrownBy(() ->
+                account.withdraw(new BigDecimal("10.00"))
+        )
+                .isInstanceOf(InvalidAccountTransitionException.class);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    @DisplayName("Cannot withdraw from CLOSED account")
+    void cannotWithdrawFromClosedAccount() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+        account.close();
+
+        assertThatThrownBy(() ->
+                account.withdraw(new BigDecimal("10.00"))
+        )
+                .isInstanceOf(InvalidAccountTransitionException.class);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    @DisplayName("Cannot withdraw zero amount")
+    void cannotWithdrawZeroAmount() {
+
+        Account account = newAccount();
+        account.activate();
+        account.deposit(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() ->
+                account.withdraw(BigDecimal.ZERO)
+        )
+                .isInstanceOf(InvalidAmountException.class);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
 }
 
