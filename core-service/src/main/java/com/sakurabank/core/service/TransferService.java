@@ -41,7 +41,7 @@ public class TransferService {
         // request (same source account, destination account, amount, etc.).
         // A production-grade implementation should compare the payload and
         // reject conflicting requests that reuse an existing idempotency key.
-            
+
             return;
         }
 
@@ -49,11 +49,11 @@ public class TransferService {
             throw new InvalidTransferException(fromAccountId);
         }
 
-        Account from = accountRepository.findById(fromAccountId)
+        Account from = accountRepository.findByIdForUpdate(fromAccountId)
                 .orElseThrow(() ->
                         new AccountNotFoundException(fromAccountId));
 
-        Account to = accountRepository.findById(toAccountId)
+        Account to = accountRepository.findByIdForUpdate(toAccountId)
                 .orElseThrow(() ->
                         new AccountNotFoundException(toAccountId));
 
