@@ -58,10 +58,10 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(from, "id", fromId);
         ReflectionTestUtils.setField(to, "id", toId);
 
-        when(accountRepository.findById(fromId))
+        when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.of(from));
 
-        when(accountRepository.findById(toId))
+        when(accountRepository.findByIdForUpdate(toId))
                 .thenReturn(Optional.of(to));
 
         transferService.transfer(
@@ -98,10 +98,10 @@ class TransferServiceTest {
         ReflectionTestUtils.setField(from, "id", fromId);
         ReflectionTestUtils.setField(to, "id", toId);
 
-        when(accountRepository.findById(fromId))
+        when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.of(from));
 
-        when(accountRepository.findById(toId))
+        when(accountRepository.findByIdForUpdate(toId))
                 .thenReturn(Optional.of(to));
 
         assertThatThrownBy(() ->
@@ -123,7 +123,7 @@ class TransferServiceTest {
         UUID fromId = UUID.randomUUID();
         UUID toId = UUID.randomUUID();
 
-        when(accountRepository.findById(fromId))
+        when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
@@ -149,10 +149,10 @@ class TransferServiceTest {
 
         ReflectionTestUtils.setField(from, "id", fromId);
 
-        when(accountRepository.findById(fromId))
+        when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.of(from));
 
-        when(accountRepository.findById(toId))
+        when(accountRepository.findByIdForUpdate(toId))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
