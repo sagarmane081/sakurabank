@@ -1,11 +1,10 @@
 package com.sakurabank.core.service;
 
-import com.sakurabank.core.domain.Account;
-import com.sakurabank.core.domain.AccountNotFoundException;
-import com.sakurabank.core.domain.InsufficientFundsException;
-import com.sakurabank.core.domain.InvalidTransferException;
+import com.sakurabank.core.domain.*;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
+import com.sakurabank.core.repository.TransferRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +25,9 @@ import static org.mockito.Mockito.*;
 class TransferServiceTest {
 
     @Mock
+    private TransferRepository transferRepository;
+
+    @Mock
     private AccountRepository accountRepository;
 
     @Mock
@@ -33,6 +35,12 @@ class TransferServiceTest {
 
     @InjectMocks
     private TransferService transferService;
+
+    @BeforeEach
+    void setUp() {
+        when(transferRepository.findByIdempotencyKey(any(UUID.class)))
+                .thenReturn(Optional.empty());
+    }
 
     @Test
     void transferMovesMoneyBetweenAccounts() {
@@ -57,6 +65,7 @@ class TransferServiceTest {
                 .thenReturn(Optional.of(to));
 
         transferService.transfer(
+                UUID.randomUUID(),
                 fromId,
                 toId,
                 new BigDecimal("40.00")
@@ -97,6 +106,7 @@ class TransferServiceTest {
 
         assertThatThrownBy(() ->
                 transferService.transfer(
+                        UUID.randomUUID(),
                         fromId,
                         toId,
                         new BigDecimal("100.00")
@@ -118,6 +128,7 @@ class TransferServiceTest {
 
         assertThatThrownBy(() ->
                 transferService.transfer(
+                        UUID.randomUUID(),
                         fromId,
                         toId,
                         new BigDecimal("100.00")
@@ -146,6 +157,7 @@ class TransferServiceTest {
 
         assertThatThrownBy(() ->
                 transferService.transfer(
+                        UUID.randomUUID(),
                         fromId,
                         toId,
                         new BigDecimal("100.00")
@@ -163,6 +175,7 @@ class TransferServiceTest {
 
         assertThatThrownBy(() ->
                 transferService.transfer(
+                        UUID.randomUUID(),
                         accountId,
                         accountId,
                         new BigDecimal("100.00")
@@ -172,5 +185,37 @@ class TransferServiceTest {
 
         verifyNoInteractions(accountRepository);
         verifyNoInteractions(ledgerEntryRepository);
+    }
+
+    @Test
+    void replayRequestReturnsWithoutChangingAnything() {
+
+        UUID key = UUID.randomUUID();
+
+        // Pretend that this idempotency key has already been processed.
+        Transfer existingTransfer = new Transfer(
+                key,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                new BigDecimal("100.00")
+        );
+
+        when(transferRepository.findByIdempotencyKey(key))
+                .thenReturn(Optional.of(existingTransfer));
+
+        // Act
+        transferService.transfer(
+                key,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                new BigDecimal("100.00")
+        );
+
+        // Verify that nothing else happened.
+        verifyNoInteractions(accountRepository);
+        verifyNoInteractions(ledgerEntryRepository);
+
+        // The replay path must not create a second Transfer record.
+        verify(transferRepository, never()).save(any());
     }
 }

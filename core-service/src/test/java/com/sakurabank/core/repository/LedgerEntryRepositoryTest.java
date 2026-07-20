@@ -18,6 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LedgerEntryRepositoryTest {
 
     @Autowired
+    private TransferRepository transferRepository;
+
+    @Autowired
     private LedgerEntryRepository repository;
 
     @Autowired
@@ -25,6 +28,7 @@ class LedgerEntryRepositoryTest {
 
     @BeforeEach
     void cleanUp() {
+        transferRepository.deleteAll();
         repository.deleteAll();
         accountRepository.deleteAll();
     }
