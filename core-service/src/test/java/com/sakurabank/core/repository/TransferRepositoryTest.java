@@ -81,6 +81,9 @@ class TransferRepositoryTest {
         assertThat(result.get().getIdempotencyKey()).isEqualTo(key);
         assertThat(result.get().getAmount())
                 .isEqualByComparingTo("250.00");
+        assertThat(result.get().getFromAccountId()).isEqualTo(from.getId());
+        assertThat(result.get().getToAccountId()).isEqualTo(to.getId());
+        assertThat(result.get().getCreatedAt()).isNotNull();
     }
 
     @Test

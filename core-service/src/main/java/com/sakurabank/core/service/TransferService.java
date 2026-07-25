@@ -35,12 +35,12 @@ public class TransferService {
 
         if (existing.isPresent()) {
 
-        // TODO:
-        // Currently we treat any repeated idempotency key as a successful replay.
-        // We do not yet verify that the incoming request matches the original
-        // request (same source account, destination account, amount, etc.).
-        // A production-grade implementation should compare the payload and
-        // reject conflicting requests that reuse an existing idempotency key.
+            // TODO:
+            // Currently we treat any repeated idempotency key as a successful replay.
+            // We do not yet verify that the incoming request matches the original
+            // request (same source account, destination account, amount, etc.).
+            // A production-grade implementation should compare the payload and
+            // reject conflicting requests that reuse an existing idempotency key.
 
             return;
         }
