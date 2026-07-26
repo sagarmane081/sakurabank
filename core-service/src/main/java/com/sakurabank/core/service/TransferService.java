@@ -49,13 +49,39 @@ public class TransferService {
             throw new InvalidTransferException(fromAccountId);
         }
 
-        Account from = accountRepository.findByIdForUpdate(fromAccountId)
-                .orElseThrow(() ->
-                        new AccountNotFoundException(fromAccountId));
+    // 1. Determine lock order
+        UUID firstId;
+        UUID secondId;
 
-        Account to = accountRepository.findByIdForUpdate(toAccountId)
+        if (fromAccountId.compareTo(toAccountId) < 0) {
+            firstId = fromAccountId;
+            secondId = toAccountId;
+        } else {
+            firstId = toAccountId;
+            secondId = fromAccountId;
+        }
+
+    // 2. Lock in deterministic order
+        Account first = accountRepository.findByIdForUpdate(firstId)
                 .orElseThrow(() ->
-                        new AccountNotFoundException(toAccountId));
+                        new AccountNotFoundException(firstId));
+
+        Account second = accountRepository.findByIdForUpdate(secondId)
+                .orElseThrow(() ->
+                        new AccountNotFoundException(secondId));
+
+    // 3. Map back to business meaning
+        Account from;
+        Account to;
+
+        if (first.getId().equals(fromAccountId)) {
+            from = first;
+            to = second;
+        } else {
+            from = second;
+            to = first;
+        }
+
 
         from.withdraw(amount);
         to.deposit(amount);

@@ -120,8 +120,8 @@ class TransferServiceTest {
     @Test
     void throwsWhenSourceAccountDoesNotExist() {
 
-        UUID fromId = UUID.randomUUID();
-        UUID toId = UUID.randomUUID();
+        UUID fromId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID toId   = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
         when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.empty());
@@ -141,8 +141,8 @@ class TransferServiceTest {
     @Test
     void throwsWhenDestinationAccountDoesNotExist() {
 
-        UUID fromId = UUID.randomUUID();
-        UUID toId = UUID.randomUUID();
+        UUID fromId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID toId   = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
         Account from = new Account("ACC-001", "Alice");
         from.activate();
