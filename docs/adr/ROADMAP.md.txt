@@ -1,0 +1,20 @@
+# Roadmap & Known Limitations
+
+## Deliberately deferred (see README for reasoning)
+- Authentication/RBAC
+- KYC/AML compliance layer
+- AI RAG chatbot (ai-service)
+- Cloud deployment
+- Frontend
+
+## Known limitation: direct deposits and the ledger
+`Account.deposit()` currently updates the account's balance directly and
+does not create ledger entries — only transfers (via `TransferService`) do.
+This means the reconciliation job's `SUM(debits) == SUM(credits)` check is
+correct for all transfer activity, but does not yet cover the "how did money
+enter the system" side.
+
+**Correct fix**: introduce a system "external clearing" account; deposits
+become a transfer from that account, giving every balance change a ledger
+trail. Not implemented under this deadline — documented here so it's a known
+decision, not a blind spot.

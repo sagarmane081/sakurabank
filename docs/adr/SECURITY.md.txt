@@ -1,0 +1,25 @@
+# Security Notes
+
+## Current state
+This API is **intentionally unauthenticated** in its current milestone.
+There is no JWT/session auth, no RBAC, and no rate limiting yet.
+
+## What's actually enforced today
+- Input validation (Bean Validation) rejects malformed requests at the API
+  boundary before they reach domain logic
+- Domain-level guards (amount positivity, status checks, self-transfer
+  rejection) are enforced regardless of caller
+- Idempotency keys prevent duplicate financial operations via a database
+  UNIQUE constraint, not just application logic
+- Secrets are never committed; `gitleaks` runs in CI on every push
+- SQL injection is not possible via JPA parameterized queries
+
+## What a production deployment would require
+- OAuth2/JWT via Spring Security, with refresh token rotation
+- Role-based access control (`CUSTOMER`/`ADMIN`/`COMPLIANCE_OFFICER`)
+- Rate limiting on all endpoints, especially auth
+- TLS termination
+- PII masking in logs
+- Secrets via a managed vault (AWS SSM/Secrets Manager), not env files
+
+This is a known and documented gap, not an oversight.
