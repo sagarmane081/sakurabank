@@ -25,3 +25,10 @@ dedicated controller test — TransferController does. The JaCoCo gate
 protects the service layer specifically; see current coverage report
 in CI artifacts. Adding AccountControllerTest is the first item for
 the next work session.
+
+### Live demo output
+
+![Money moving through SakuraBank, verified by reconciliation](docs/images/curl-demo.png)
+
+### API documentation
+Interactive API docs (Swagger UI): `http://localhost:8080/swagger-ui.html`
