@@ -30,6 +30,10 @@ public class Account {
     @Column(name = "owner_name", nullable = false)
     private String ownerName;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_type", nullable = false)
+    private AccountType accountType;
+
     @JdbcTypeCode(SqlTypes.CHAR)
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
@@ -37,10 +41,19 @@ public class Account {
     protected Account() {}
 
     public Account(String accountNumber, String ownerName) {
+        this(accountNumber, ownerName, AccountType.CUSTOMER);
+    }
+
+    public Account(String accountNumber, String ownerName, AccountType accountType) {
 
         Objects.requireNonNull(
                 accountNumber,
                 "accountNumber must not be null"
+        );
+
+        this.accountType = Objects.requireNonNull(
+                accountType,
+                "accountType must not be null"
         );
 
         if (accountNumber.isBlank()) {
@@ -81,9 +94,10 @@ public class Account {
         return currency;
     }
 
-    public AccountStatus getStatus() {
+    public AccountStatus getStatus() {return status;}
 
-        return status;
+    public AccountType getAccountType() {
+        return accountType;
     }
 
     public void activate() {
@@ -135,7 +149,9 @@ public class Account {
             throw new InvalidAmountException(amount);
         }
 
-        if (amount.compareTo(balance) > 0) {
+        if (accountType == AccountType.CUSTOMER &&
+                amount.compareTo(balance) > 0) {
+
             throw new InsufficientFundsException(amount, balance);
         }
 
