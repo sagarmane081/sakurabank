@@ -77,17 +77,26 @@ class AccountControllerTest {
         account.activate();
         account.deposit(new BigDecimal("500.00"));
 
-        when(accountService.deposit(eq(accountId), eq(new BigDecimal("500.00"))))
+        when(accountService.deposit(
+                any(UUID.class),
+                eq(accountId),
+                eq(new BigDecimal("500.00"))))
                 .thenReturn(account);
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new DepositRequest(new BigDecimal("500.00")))))
+                                new DepositRequest(
+                                        UUID.randomUUID(),
+                                        new BigDecimal("500.00")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(500.00));
 
-        verify(accountService).deposit(accountId, new BigDecimal("500.00"));
+        verify(accountService)
+                .deposit(
+                        any(UUID.class),
+                        eq(accountId),
+                        eq(new BigDecimal("500.00")));
     }
 
     @Test
@@ -98,7 +107,9 @@ class AccountControllerTest {
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new DepositRequest(new BigDecimal("-10.00")))))
+                                new DepositRequest(
+                                        UUID.randomUUID(),
+                                        new BigDecimal("-10.00")))))
                 .andExpect(status().isBadRequest());
     }
 
@@ -107,13 +118,18 @@ class AccountControllerTest {
 
         UUID accountId = UUID.randomUUID();
 
-        when(accountService.deposit(eq(accountId), any()))
+        when(accountService.deposit(
+                any(UUID.class),
+                eq(accountId),
+                any(BigDecimal.class)))
                 .thenThrow(new AccountNotFoundException(accountId));
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new DepositRequest(new BigDecimal("100.00")))))
+                                new DepositRequest(
+                                        UUID.randomUUID(),
+                                        new BigDecimal("100.00")))))
                 .andExpect(status().isNotFound());
     }
 
@@ -122,7 +138,10 @@ class AccountControllerTest {
 
         UUID accountId = UUID.randomUUID();
 
-        when(accountService.deposit(eq(accountId), any()))
+        when(accountService.deposit(
+                any(UUID.class),
+                eq(accountId),
+                any(BigDecimal.class)))
                 .thenThrow(new InvalidAccountTransitionException(
                         AccountStatus.FROZEN,
                         "deposit"));
@@ -130,7 +149,9 @@ class AccountControllerTest {
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new DepositRequest(new BigDecimal("100.00")))))
+                                new DepositRequest(
+                                        UUID.randomUUID(),
+                                        new BigDecimal("100.00")))))
                 .andExpect(status().isConflict())
                 .andExpect(content().string(
                         "Cannot deposit in an account which is in FROZEN status."));

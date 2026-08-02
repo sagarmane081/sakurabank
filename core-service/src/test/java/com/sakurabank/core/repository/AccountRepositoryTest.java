@@ -2,17 +2,20 @@ package com.sakurabank.core.repository;
 
 import com.sakurabank.core.domain.Account;
 import com.sakurabank.core.domain.AccountStatus;
+import com.sakurabank.core.domain.AccountType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Transactional
 class AccountRepositoryTest {
 
     @Autowired
@@ -28,7 +31,7 @@ class AccountRepositoryTest {
     void cleanUp() {
         transferRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
-        accountRepository.deleteAll();
+        accountRepository.deleteByAccountType(AccountType.CUSTOMER);
     }
 
     @Test

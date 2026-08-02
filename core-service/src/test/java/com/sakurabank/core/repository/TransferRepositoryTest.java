@@ -1,11 +1,13 @@
 package com.sakurabank.core.repository;
 
 import com.sakurabank.core.domain.Account;
+import com.sakurabank.core.domain.AccountType;
 import com.sakurabank.core.domain.Transfer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -14,6 +16,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Transactional
 class TransferRepositoryTest {
 
     @Autowired
@@ -29,7 +32,7 @@ class TransferRepositoryTest {
     void cleanUp() {
         transferRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
-        accountRepository.deleteAll();
+        accountRepository.deleteByAccountType(AccountType.CUSTOMER);
     }
 
     @Test
@@ -72,10 +75,36 @@ class TransferRepositoryTest {
                 to.getId(),
                 new BigDecimal("250.00"));
 
-        transferRepository.save(transfer);
+        transferRepository.saveAndFlush(transfer);
+
+        System.out.println("Saved transfer key = " + transfer.getIdempotencyKey());
+
+        transferRepository.findAll().forEach(t ->
+                System.out.println(
+                        "DB key = " + t.getIdempotencyKey() +
+                                ", id = " + t.getId()
+                )
+        );
+
+        Transfer dbTransfer = transferRepository.findAll().getFirst();
+
+        System.out.println(
+                transferRepository.findById(dbTransfer.getId())
+        );
+
+        System.out.println("Expected key : " + key);
+        System.out.println("Saved key    : " + transfer.getIdempotencyKey());
+        System.out.println("Database key : " + dbTransfer.getIdempotencyKey());
+
+        System.out.println("Find by ID = " +
+                transferRepository.findById(dbTransfer.getId()));
 
         Optional<Transfer> result =
-                transferRepository.findByIdempotencyKey(key);
+                transferRepository.findByIdempotencyKey(dbTransfer.getIdempotencyKey());
+
+        System.out.println(
+                "createdAt = " + result.get().getCreatedAt()
+        );
 
         assertThat(result).isPresent();
         assertThat(result.get().getIdempotencyKey()).isEqualTo(key);

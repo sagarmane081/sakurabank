@@ -1,9 +1,7 @@
 package com.sakurabank.core.service;
 
-import com.sakurabank.core.domain.Account;
-import com.sakurabank.core.domain.AccountNotFoundException;
-import com.sakurabank.core.domain.AccountStatus;
-import com.sakurabank.core.domain.LedgerEntry;
+import com.sakurabank.core.SystemAccounts;
+import com.sakurabank.core.domain.*;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
@@ -11,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -18,8 +17,10 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 @SpringBootTest
+@Transactional
 class AccountServiceTest {
 
     @Autowired AccountService accountService;
@@ -32,16 +33,20 @@ class AccountServiceTest {
     void cleanUp() {
         transferRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
-        accountRepository.deleteAll();
-    }
+        accountRepository.deleteByAccountType(AccountType.CUSTOMER);    }
 
     @Test
     void opensAndFundsAnAccount() {
         Account opened = accountService.openAccount("Alice");
         assertThat(opened.getId()).isNotNull();
         assertThat(opened.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(accountRepository.findById(SystemAccounts.CLEARING_ACCOUNT_ID))
+                .isPresent();
 
-        Account funded = accountService.deposit(opened.getId(), new BigDecimal("500.00"));
+        Account funded = accountService.deposit(
+                UUID.randomUUID(),
+                opened.getId(),
+                new BigDecimal("500.00"));
         assertThat(funded.getBalance()).isEqualByComparingTo("500.00");
 
         Account reloaded = accountService.getAccount(opened.getId());
@@ -53,7 +58,10 @@ class AccountServiceTest {
         UUID id = UUID.randomUUID();
 
         assertThatThrownBy(() ->
-                accountService.deposit(id, new BigDecimal("100.00")))
+                accountService.deposit(
+                        UUID.randomUUID(),
+                        id,
+                        new BigDecimal("100.00")))
                 .isInstanceOf(AccountNotFoundException.class);
     }
 
@@ -83,7 +91,10 @@ class AccountServiceTest {
         Account from = accountService.openAccount("Alice");
         Account to = accountService.openAccount("Bob");
 
-        accountService.deposit(from.getId(), new BigDecimal("1000"));
+        accountService.deposit(
+                UUID.randomUUID(),
+                from.getId(),
+                new BigDecimal("1000"));
 
         transferService.transfer(
                 UUID.randomUUID(),
@@ -95,10 +106,17 @@ class AccountServiceTest {
                 accountService.getTransactionHistory(from.getId());
 
         assertThat(history)
-                .hasSize(1);
+                .hasSize(2);
 
-        assertThat(history.getFirst().getAmount())
-                .isEqualByComparingTo("250");
+        assertThat(history)
+                .hasSize(2);
+
+        assertThat(history)
+                .extracting(LedgerEntry::getEntryType, LedgerEntry::getAmount)
+                .containsExactlyInAnyOrder(
+                        tuple(EntryType.CREDIT, new BigDecimal("1000")),
+                        tuple(EntryType.DEBIT, new BigDecimal("250"))
+                );
     }
 
     @Test

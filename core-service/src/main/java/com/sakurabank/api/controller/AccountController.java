@@ -28,8 +28,17 @@ public class AccountController {
     }
 
     @PostMapping("/{id}/deposit")
-    public ResponseEntity<AccountResponse> deposit(@PathVariable UUID id, @Valid @RequestBody DepositRequest request) {
-        return ResponseEntity.ok(toResponse(accountService.deposit(id, request.amount())));
+    public AccountResponse deposit(
+            @PathVariable UUID id,
+            @Valid @RequestBody DepositRequest request) {
+
+        return toResponse(
+                accountService.deposit(
+                        request.idempotencyKey(),
+                        id,
+                        request.amount()
+                )
+        );
     }
 
     @GetMapping("/{id}")

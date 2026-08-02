@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -17,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 @SpringBootTest
+@Transactional
 class TransferServiceIntegrationTest {
 
     @Autowired
@@ -35,7 +37,7 @@ class TransferServiceIntegrationTest {
     void cleanUp() {
         transferRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
-        accountRepository.deleteAll();
+        accountRepository.deleteByAccountType(AccountType.CUSTOMER);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.sakurabank.core.service;
 
 import com.sakurabank.core.domain.Account;
+import com.sakurabank.core.domain.AccountType;
 import com.sakurabank.core.domain.EntryType;
 import com.sakurabank.core.domain.LedgerEntry;
 import com.sakurabank.core.repository.AccountRepository;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -17,6 +19,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Transactional
 class ReconciliationServiceTest {
 
     @Autowired ReconciliationService reconciliationService;
@@ -29,7 +32,7 @@ class ReconciliationServiceTest {
     void cleanUp() {
         transferRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
-        accountRepository.deleteAll();
+        accountRepository.deleteByAccountType(AccountType.CUSTOMER);
     }
 
     @Test

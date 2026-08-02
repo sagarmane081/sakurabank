@@ -1,6 +1,7 @@
 package com.sakurabank.core.service;
 
 import com.sakurabank.core.domain.Account;
+import com.sakurabank.core.domain.AccountType;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
@@ -8,6 +9,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -31,15 +34,17 @@ class TransferDeadlockTest {
     @Autowired
     TransferRepository transferRepository;
 
-    @BeforeEach
-    void cleanUp() {
-        transferRepository.deleteAll();
-        ledgerRepository.deleteAll();
-        accountRepository.deleteAll();
-    }
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Test
     void simultaneousOppositeDirectionTransfersDoNotDeadlock() throws Exception {
+
+        transactionTemplate.executeWithoutResult(status -> {
+            transferRepository.deleteAll();
+            ledgerRepository.deleteAll();
+            accountRepository.deleteByAccountType(AccountType.CUSTOMER);
+        });
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -123,11 +128,11 @@ class TransferDeadlockTest {
                 .isTrue();
 
         Account updatedFirst =
-                accountRepository.findById(first.getId())
+                accountRepository.findById(savedFirst.getId())
                         .orElseThrow();
 
         Account updatedSecond =
-                accountRepository.findById(second.getId())
+                accountRepository.findById(savedSecond.getId())
                         .orElseThrow();
 
         assertThat(failures).isEmpty();

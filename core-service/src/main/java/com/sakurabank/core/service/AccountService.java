@@ -11,17 +11,22 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import com.sakurabank.core.SystemAccounts;
 
 @Service
 public class AccountService {
 
     private final AccountRepository accountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final TransferService transferService;
 
     public AccountService(AccountRepository accountRepository,
-                          LedgerEntryRepository ledgerEntryRepository) {
+                          LedgerEntryRepository ledgerEntryRepository,
+                          TransferService transferService) {
+
         this.accountRepository = accountRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
+        this.transferService = transferService;
     }
 
     @Transactional
@@ -38,13 +43,19 @@ public class AccountService {
     }
 
     @Transactional
-    public Account deposit(UUID accountId, BigDecimal amount) {
-        Account account = accountRepository.findById(accountId)
+    public Account deposit(
+            UUID idempotencyKey,
+            UUID accountId,
+            BigDecimal amount) {
+        transferService.transfer(
+                idempotencyKey,
+                SystemAccounts.CLEARING_ACCOUNT_ID,
+                accountId,
+                amount
+        );
+
+        return accountRepository.findById(accountId)
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
-        account.deposit(amount);
-        return accountRepository.save(account);
-        // NOTE: direct deposits do not create a ledger entry in Tier 1.
-        // See ROADMAP.md — external clearing account is the correct fix.
     }
 
     public Account getAccount(UUID accountId) {

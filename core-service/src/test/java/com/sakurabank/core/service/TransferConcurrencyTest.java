@@ -1,6 +1,7 @@
 package com.sakurabank.core.service;
 
 import com.sakurabank.core.domain.Account;
+import com.sakurabank.core.domain.AccountType;
 import com.sakurabank.core.domain.EntryType;
 import com.sakurabank.core.domain.LedgerEntry;
 import com.sakurabank.core.repository.AccountRepository;
@@ -10,6 +11,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -38,17 +41,18 @@ class TransferConcurrencyTest {
     @Autowired
     private LedgerEntryRepository ledgerEntryRepository;
 
-    @BeforeEach
-    void cleanUp() {
-        transferRepository.deleteAll();
-        ledgerEntryRepository.deleteAll();
-        accountRepository.deleteAll();
-    }
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Test
     void concurrentTransfersLoseNoMoney() throws InterruptedException{
 
-        // Arrange
+        transactionTemplate.executeWithoutResult(status -> {
+            transferRepository.deleteAll();
+            ledgerEntryRepository.deleteAll();
+            accountRepository.deleteByAccountType(AccountType.CUSTOMER);
+        });
+
         int threads = 50;
 
         ExecutorService executor =

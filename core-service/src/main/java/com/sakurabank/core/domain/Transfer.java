@@ -10,6 +10,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.GenerationTime;
 
 @Entity
 @Table(name = "transfers", schema = "core")
@@ -31,7 +33,12 @@ public class Transfer {
     @Column(nullable = false)
     private BigDecimal amount;
 
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @Generated(GenerationTime.INSERT)
+    @Column(
+            name = "created_at",
+            insertable = false,
+            updatable = false
+    )
     private LocalDateTime createdAt;
 
     protected Transfer() {
