@@ -7,6 +7,7 @@ import com.sakurabank.core.domain.LedgerEntry;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -164,5 +165,14 @@ class TransferConcurrencyTest {
 
         assertThat(totalCredits)
                 .isEqualByComparingTo("500.00");
+    }
+
+    @AfterEach
+    void cleanUp() {
+        transactionTemplate.executeWithoutResult(status -> {
+            transferRepository.deleteAll();
+            ledgerEntryRepository.deleteAll();
+            accountRepository.deleteByAccountType(AccountType.CUSTOMER);
+        });
     }
 }

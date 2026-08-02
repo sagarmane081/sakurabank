@@ -1,5 +1,6 @@
 package com.sakurabank.core.service;
 
+import com.sakurabank.core.SystemAccounts;
 import com.sakurabank.core.domain.Account;
 import com.sakurabank.core.domain.AccountNotFoundException;
 import com.sakurabank.core.domain.LedgerEntry;
@@ -11,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
-import com.sakurabank.core.SystemAccounts;
 
 @Service
 public class AccountService {
@@ -47,7 +47,7 @@ public class AccountService {
             UUID idempotencyKey,
             UUID accountId,
             BigDecimal amount) {
-        transferService.transfer(
+        transferService.internalTransfer(
                 idempotencyKey,
                 SystemAccounts.CLEARING_ACCOUNT_ID,
                 accountId,

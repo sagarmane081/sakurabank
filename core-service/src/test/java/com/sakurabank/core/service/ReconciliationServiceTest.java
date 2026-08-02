@@ -1,5 +1,6 @@
 package com.sakurabank.core.service;
 
+import com.sakurabank.core.SystemAccounts;
 import com.sakurabank.core.domain.Account;
 import com.sakurabank.core.domain.AccountType;
 import com.sakurabank.core.domain.EntryType;
@@ -27,6 +28,7 @@ class ReconciliationServiceTest {
     @Autowired AccountRepository accountRepository;
     @Autowired LedgerEntryRepository ledgerEntryRepository;
     @Autowired TransferRepository transferRepository;
+    @Autowired AccountService accountService;
 
     @BeforeEach
     void cleanUp() {
@@ -168,5 +170,51 @@ class ReconciliationServiceTest {
 
         assertThat(report.unbalancedTransactionIds())
                 .contains(txId);
+    }
+
+    @Test
+    void depositCreatesBalancedLedgerEntriesUsingClearingAccount() {
+        Account account = new Account("ACC-10000001", "Alice");
+        account.activate();
+
+        Account saved = accountRepository.save(account);
+
+        UUID key = UUID.randomUUID();
+
+        accountService.deposit(
+                UUID.randomUUID(),
+                saved.getId(),
+                new BigDecimal("500.00")
+        );
+
+        var report = reconciliationService.reconcile();
+
+        assertThat(report.isClean()).isTrue();
+        assertThat(report.totalDebits())
+                .isEqualByComparingTo(report.totalCredits());
+
+        var entries = ledgerEntryRepository.findAll();
+
+        assertThat(entries).hasSize(2);
+
+        assertThat(entries)
+                .filteredOn(e -> e.getEntryType() == EntryType.DEBIT)
+                .singleElement()
+                .satisfies(e -> {
+                    assertThat(e.getAccountId())
+                            .isEqualTo(SystemAccounts.CLEARING_ACCOUNT_ID);
+                    assertThat(e.getAmount())
+                            .isEqualByComparingTo("500.00");
+                });
+
+        assertThat(entries)
+                .filteredOn(e -> e.getEntryType() == EntryType.CREDIT)
+                .singleElement()
+                .satisfies(e -> {
+                    assertThat(e.getAccountId())
+                            .isEqualTo(saved.getId());
+                    assertThat(e.getAmount())
+                            .isEqualByComparingTo("500.00");
+                });
     }
 }

@@ -1,9 +1,11 @@
 package com.sakurabank.core.service;
 
+import com.sakurabank.core.SystemAccounts;
 import com.sakurabank.core.domain.*;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -273,5 +275,65 @@ class TransferServiceIntegrationTest {
         // Two Transfer rows should exist.
         assertThat(transferRepository.findAll())
                 .hasSize(2);
+    }
+
+    @Test
+    void publicTransferRejectsSystemAccountAsSource() {
+
+        Account customer = new Account("ACC-001", "Alice");
+        customer.activate();
+
+        Account savedCustomer = accountRepository.save(customer);
+
+        // Act + Assert
+        assertThatThrownBy(() ->
+                transferService.transfer(
+                        UUID.randomUUID(),
+                        SystemAccounts.CLEARING_ACCOUNT_ID,
+                        savedCustomer.getId(),
+                        new BigDecimal("100.00")
+                ))
+                .isInstanceOf(SystemAccountTransferNotAllowedException.class);
+
+        // Nothing should have been persisted.
+        assertThat(transferRepository.findAll()).isEmpty();
+        assertThat(ledgerEntryRepository.findAll()).isEmpty();
+
+        Account reloaded =
+                accountRepository.findById(savedCustomer.getId())
+                        .orElseThrow();
+
+        assertThat(reloaded.getBalance())
+                .isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void publicTransferRejectsSystemAccountAsTransferDestination() {
+
+        Account customer = new Account("ACC-001", "Alice");
+        customer.activate();
+
+        Account savedCustomer = accountRepository.save(customer);
+
+        // Act + Assert
+        assertThatThrownBy(() ->
+                transferService.transfer(
+                        UUID.randomUUID(),
+                        savedCustomer.getId(),
+                        SystemAccounts.CLEARING_ACCOUNT_ID,
+                        new BigDecimal("10.00")
+                ))
+                .isInstanceOf(SystemAccountTransferNotAllowedException.class);
+
+        // Nothing should have been persisted.
+        assertThat(transferRepository.findAll()).isEmpty();
+        assertThat(ledgerEntryRepository.findAll()).isEmpty();
+
+        Account reloaded =
+                accountRepository.findById(savedCustomer.getId())
+                        .orElseThrow();
+
+        assertThat(reloaded.getBalance())
+                .isEqualByComparingTo("0.00");
     }
 }

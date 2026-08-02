@@ -27,8 +27,43 @@ public class TransferService {
     }
 
     @Transactional
-    public void transfer(UUID idempotencyKey, UUID fromAccountId, UUID toAccountId, BigDecimal amount)
+    public void transfer(
+            UUID idempotencyKey,
+            UUID fromAccountId,
+            UUID toAccountId,
+            BigDecimal amount) {
 
+        doTransfer(
+                idempotencyKey,
+                fromAccountId,
+                toAccountId,
+                amount,
+                true
+        );
+    }
+
+    @Transactional
+    public void internalTransfer(
+            UUID idempotencyKey,
+            UUID fromAccountId,
+            UUID toAccountId,
+            BigDecimal amount) {
+
+        doTransfer(
+                idempotencyKey,
+                fromAccountId,
+                toAccountId,
+                amount,
+                false
+        );
+    }
+
+    private void doTransfer(
+            UUID idempotencyKey,
+            UUID fromAccountId,
+            UUID toAccountId,
+            BigDecimal amount,
+            boolean rejectSystemAccounts)
     {
         Optional<Transfer> existing =
                 transferRepository.findByIdempotencyKey(idempotencyKey);
@@ -49,7 +84,7 @@ public class TransferService {
             throw new InvalidTransferException(fromAccountId);
         }
 
-    // 1. Determine lock order
+        // 1. Determine lock order
         UUID firstId;
         UUID secondId;
 
@@ -61,7 +96,7 @@ public class TransferService {
             secondId = fromAccountId;
         }
 
-    // 2. Lock in deterministic order
+        // 2. Lock in deterministic order
         Account first = accountRepository.findByIdForUpdate(firstId)
                 .orElseThrow(() ->
                         new AccountNotFoundException(firstId));
@@ -70,7 +105,7 @@ public class TransferService {
                 .orElseThrow(() ->
                         new AccountNotFoundException(secondId));
 
-    // 3. Map back to business meaning
+        // 3. Map back to business meaning
         Account from;
         Account to;
 
@@ -82,6 +117,16 @@ public class TransferService {
             to = first;
         }
 
+        if (rejectSystemAccounts) {
+
+            if (from.getAccountType() == AccountType.SYSTEM) {
+                throw new SystemAccountTransferNotAllowedException(from.getId());
+            }
+
+            if (to.getAccountType() == AccountType.SYSTEM) {
+                throw new SystemAccountTransferNotAllowedException(to.getId());
+            }
+        }
 
         from.withdraw(amount);
         to.deposit(amount);
