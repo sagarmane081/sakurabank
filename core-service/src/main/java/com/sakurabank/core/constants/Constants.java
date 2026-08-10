@@ -1,4 +1,4 @@
-package com.sakurabank.core.Constants;
+package com.sakurabank.core.constants;
 
 import java.util.UUID;
 

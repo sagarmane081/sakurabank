@@ -1,6 +1,7 @@
 package com.sakurabank.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sakurabank.api.config.SecurityTestConfig;
 import com.sakurabank.api.dto.DepositRequest;
 import com.sakurabank.api.dto.OpenAccountRequest;
 import com.sakurabank.core.domain.*;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,8 +26,15 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import com.sakurabank.core.domain.Role;
+import com.sakurabank.core.security.JwtService;
+import com.sakurabank.core.config.SecurityConfig;
 
 @WebMvcTest(AccountController.class)
+@Import({
+        SecurityTestConfig.class,
+        SecurityConfig.class
+})
 class AccountControllerTest {
 
     @Autowired
@@ -37,6 +46,9 @@ class AccountControllerTest {
     @MockBean
     AccountService accountService;
 
+    @Autowired
+    JwtService jwtService;
+
     @Test
     void openAccountReturnsCreatedAccount() throws Exception {
 
@@ -47,6 +59,10 @@ class AccountControllerTest {
                 .thenReturn(account);
 
         mockMvc.perform(post("/api/accounts")
+                        .header(
+                                "Authorization",
+                                "Bearer " + customerToken()
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new OpenAccountRequest("Alice"))))
@@ -62,6 +78,10 @@ class AccountControllerTest {
     void openAccountReturnsBadRequestWhenOwnerNameIsBlank() throws Exception {
 
         mockMvc.perform(post("/api/accounts")
+                        .header(
+                                "Authorization",
+                                "Bearer " + customerToken()
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new OpenAccountRequest(""))))
@@ -84,6 +104,10 @@ class AccountControllerTest {
                 .thenReturn(account);
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
+                        .header(
+                                "Authorization",
+                                "Bearer " + customerToken()
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new DepositRequest(
@@ -105,6 +129,10 @@ class AccountControllerTest {
         UUID accountId = UUID.randomUUID();
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
+                        .header(
+                                "Authorization",
+                                "Bearer " + customerToken()
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new DepositRequest(
@@ -125,6 +153,10 @@ class AccountControllerTest {
                 .thenThrow(new AccountNotFoundException(accountId));
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
+                        .header(
+                                "Authorization",
+                                "Bearer " + customerToken()
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new DepositRequest(
@@ -147,6 +179,10 @@ class AccountControllerTest {
                         "deposit"));
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
+                        .header(
+                                "Authorization",
+                                "Bearer " + customerToken()
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new DepositRequest(
@@ -168,7 +204,20 @@ class AccountControllerTest {
         when(accountService.getAccount(accountId))
                 .thenReturn(account);
 
-        mockMvc.perform(get("/api/accounts/{id}", accountId))
+        User user = new User(
+                "alice",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        String token = jwtService.generateToken(user);
+
+        mockMvc.perform(
+                        get("/api/accounts/{id}", accountId)
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + token
+                                ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ownerName").value("Alice"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -182,7 +231,12 @@ class AccountControllerTest {
         when(accountService.getAccount(accountId))
                 .thenThrow(new AccountNotFoundException(accountId));
 
-        mockMvc.perform(get("/api/accounts/{id}", accountId))
+        mockMvc.perform(
+                        get("/api/accounts/{id}", accountId)
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                ))
                 .andExpect(status().isNotFound());
     }
 
@@ -194,7 +248,12 @@ class AccountControllerTest {
         when(accountService.getTransactionHistory(accountId))
                 .thenReturn(List.of());
 
-        mockMvc.perform(get("/api/accounts/{id}/transactions", accountId))
+        mockMvc.perform(
+                        get("/api/accounts/{id}/transactions", accountId)
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -216,10 +275,24 @@ class AccountControllerTest {
         when(accountService.getTransactionHistory(accountId))
                 .thenReturn(List.of(entry));
 
-        mockMvc.perform(get("/api/accounts/{id}/transactions", accountId))
-                .andExpect(status().isOk())
+        mockMvc.perform(
+                        get("/api/accounts/{id}/transactions", accountId)
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                ))                .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].transactionId").value(txId.toString()))
                 .andExpect(jsonPath("$[0].entryType").value("DEBIT"))
                 .andExpect(jsonPath("$[0].amount").value(250.00));
+    }
+
+    private String customerToken() {
+        User user = new User(
+                "alice",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        return jwtService.generateToken(user);
     }
 }

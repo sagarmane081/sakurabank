@@ -1,9 +1,12 @@
 package com.sakurabank.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sakurabank.api.config.SecurityTestConfig;
 import com.sakurabank.api.dto.TransferRequest;
 import com.sakurabank.api.exception.ApiExceptionHandler;
+import com.sakurabank.core.config.SecurityConfig;
 import com.sakurabank.core.domain.*;
+import com.sakurabank.core.security.JwtService;
 import com.sakurabank.core.service.TransferService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +27,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(TransferController.class)
-@Import(ApiExceptionHandler.class)
+@Import({
+        ApiExceptionHandler.class,
+        SecurityTestConfig.class,
+        SecurityConfig.class
+})
 class TransferControllerTest {
 
     @Autowired
@@ -35,6 +42,9 @@ class TransferControllerTest {
 
     @MockBean
     TransferService transferService;
+
+    @Autowired
+    JwtService jwtService;
 
     @Test
     void transferReturnsOk() throws Exception {
@@ -49,6 +59,10 @@ class TransferControllerTest {
 
         mockMvc.perform(
                         post("/api/transfers")
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                )
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -88,6 +102,10 @@ class TransferControllerTest {
 
         mockMvc.perform(
                         post("/api/transfers")
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                )
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -118,6 +136,10 @@ class TransferControllerTest {
 
         mockMvc.perform(
                         post("/api/transfers")
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                )
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -148,6 +170,10 @@ class TransferControllerTest {
 
         mockMvc.perform(
                         post("/api/transfers")
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                )
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -179,6 +205,10 @@ class TransferControllerTest {
 
         mockMvc.perform(
                         post("/api/transfers")
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                )
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -190,6 +220,10 @@ class TransferControllerTest {
 
         mockMvc.perform(
                         post("/api/transfers")
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                )
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}")
                 )
@@ -224,6 +258,10 @@ class TransferControllerTest {
 
         mockMvc.perform(
                         post("/api/transfers")
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + customerToken()
+                                )
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request))
                 )
@@ -231,5 +269,15 @@ class TransferControllerTest {
                 .andExpect(content().string(
                         "Account not found: " + request.fromAccountId()
                 ));
+    }
+
+    private String customerToken() {
+        User user = new User(
+                "alice",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        return jwtService.generateToken(user);
     }
 }

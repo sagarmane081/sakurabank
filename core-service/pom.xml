@@ -63,6 +63,36 @@
       <version>2.6.0</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-crypto</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-api</artifactId>
+      <version>0.12.6</version>
+    </dependency>
+
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-impl</artifactId>
+      <version>0.12.6</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-jackson</artifactId>
+      <version>0.12.6</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
   </dependencies>
 
   <build>
@@ -73,7 +103,7 @@
       </plugin>
 
       <!-- Coverage from the first commit. The 80% gate applies to the service
-           layer (com.sakurabank.core.service..*) and activates automatically
+           layer (com.sakurabank.core.service.*) and activates automatically
            the moment Phase 1 adds classes there — nothing to remember later. -->
       <plugin>
         <groupId>org.jacoco</groupId>
