@@ -16,6 +16,7 @@ jobs:
       ai: ${{ steps.filter.outputs.ai }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -28,12 +29,13 @@ jobs:
               - '.github/workflows/**'
 
   gitleaks:
-    # Runs on every push regardless of paths — secrets can leak anywhere.
+    # Runs on every push regardless of paths - secrets can leak anywhere.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,6 +44,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -56,21 +59,27 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+
     defaults:
       run:
         working-directory: core-service
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-      # `verify` runs unit tests + JaCoCo report + the 80% service-layer
-      # `verify` runs unit + integration tests against the service container
-      # Postgres above, plus the JaCoCo 80% service-layer coverage gate.
+
+      # verify runs unit + integration tests against the PostgreSQL
+      # service container above, plus the JaCoCo coverage gate.
       - name: Build, test, coverage gate
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: mvn -B verify
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
@@ -82,21 +91,27 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ai == 'true'
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: ai-service
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+
       - name: Install
         run: pip install -e ".[dev]"
+
       - name: Lint (ruff)
         run: ruff check .
+
       # pytest addopts in pyproject.toml enforce --cov-fail-under=80
       - name: Tests + coverage gate
         run: pytest
 
-  # Phase 4 adds: docker build + Trivy image scan + push + deploy stages.
+# Phase 4 adds: docker build + Trivy image scan + push + deploy stages.
