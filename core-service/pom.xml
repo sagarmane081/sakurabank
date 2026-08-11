@@ -102,6 +102,16 @@
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
 
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <JWT_SECRET>test-only-secret-for-sakurabank-jwt-12345678901234567890</JWT_SECRET>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+
       <!-- Coverage from the first commit. The 80% gate applies to the service
            layer (com.sakurabank.core.service.*) and activates automatically
            the moment Phase 1 adds classes there — nothing to remember later. -->
