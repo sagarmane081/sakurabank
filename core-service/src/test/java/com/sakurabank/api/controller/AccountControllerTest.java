@@ -5,6 +5,7 @@ import com.sakurabank.api.config.SecurityTestConfig;
 import com.sakurabank.api.dto.DepositRequest;
 import com.sakurabank.api.dto.OpenAccountRequest;
 import com.sakurabank.core.domain.*;
+import com.sakurabank.core.repository.UserRepository;
 import com.sakurabank.core.service.AccountService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -46,6 +48,9 @@ class AccountControllerTest {
     @MockBean
     AccountService accountService;
 
+    @MockBean
+    UserRepository userRepository;
+
     @Autowired
     JwtService jwtService;
 
@@ -55,7 +60,20 @@ class AccountControllerTest {
         Account account = new Account("ACC-12345678", "Alice");
         account.activate();
 
-        when(accountService.openAccount("Alice"))
+        UUID userId = UUID.randomUUID();
+
+        User user = new User(
+                "alice",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
+        when(accountService.openAccount(
+                eq("Alice"),
+                eq(user.getId())))
                 .thenReturn(account);
 
         mockMvc.perform(post("/api/accounts")
@@ -71,7 +89,9 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.accountNumber").value("ACC-12345678"));
 
-        verify(accountService).openAccount("Alice");
+        verify(accountService).openAccount(
+                eq("Alice"),
+                eq(user.getId()));
     }
 
     @Test
@@ -201,14 +221,19 @@ class AccountControllerTest {
         Account account = new Account("ACC-12345678", "Alice");
         account.activate();
 
-        when(accountService.getAccount(accountId))
-                .thenReturn(account);
-
         User user = new User(
                 "alice",
                 "already-hashed-password",
                 Role.CUSTOMER
         );
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
+        when(accountService.getAccount(
+                eq(accountId),
+                eq(user.getId())))
+                .thenReturn(account);
 
         String token = jwtService.generateToken(user);
 
@@ -228,16 +253,59 @@ class AccountControllerTest {
 
         UUID accountId = UUID.randomUUID();
 
-        when(accountService.getAccount(accountId))
+        User user = new User(
+                "alice",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
+        when(accountService.getAccount(
+                eq(accountId),
+                eq(user.getId())))
                 .thenThrow(new AccountNotFoundException(accountId));
+
+        String token = jwtService.generateToken(user);
 
         mockMvc.perform(
                         get("/api/accounts/{id}", accountId)
                                 .header(
                                         "Authorization",
-                                        "Bearer " + customerToken()
+                                        "Bearer " + token
                                 ))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void customerCannotAccessAnotherCustomersAccount() throws Exception {
+
+        UUID accountId = UUID.randomUUID();
+
+        User bob = new User(
+                "bob",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        when(userRepository.findByUsername("bob"))
+                .thenReturn(Optional.of(bob));
+
+        when(accountService.getAccount(
+                eq(accountId),
+                eq(bob.getId())))
+                .thenThrow(new AccountOwnershipException());
+
+        String token = jwtService.generateToken(bob);
+
+        mockMvc.perform(
+                        get("/api/accounts/{id}", accountId)
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + token
+                                ))
+                .andExpect(status().isForbidden());
     }
 
     @Test

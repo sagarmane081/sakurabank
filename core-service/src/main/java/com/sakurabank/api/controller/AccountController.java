@@ -2,7 +2,6 @@ package com.sakurabank.api.controller;
 
 import com.sakurabank.api.dto.*;
 import com.sakurabank.core.domain.Account;
-import com.sakurabank.core.domain.LedgerEntry;
 import com.sakurabank.core.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -11,20 +10,42 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import com.sakurabank.core.repository.UserRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
 
     private final AccountService accountService;
+    private final UserRepository userRepository;
 
-    public AccountController(AccountService accountService) {
+    public AccountController(AccountService accountService,
+                             UserRepository userRepository) {
         this.accountService = accountService;
+        this.userRepository = userRepository;
     }
 
     @PostMapping
-    public ResponseEntity<AccountResponse> openAccount(@Valid @RequestBody OpenAccountRequest request) {
-        return ResponseEntity.ok(toResponse(accountService.openAccount(request.ownerName())));
+    public ResponseEntity<AccountResponse> openAccount(
+            @Valid @RequestBody OpenAccountRequest request) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        String username = authentication.getName();
+
+        UUID userId = userRepository.findByUsername(username)
+                .orElseThrow()
+                .getId();
+
+        Account account = accountService.openAccount(
+                request.ownerName(),
+                userId
+        );
+
+        return ResponseEntity.ok(toResponse(account));
     }
 
     @PostMapping("/{id}/deposit")
@@ -43,7 +64,19 @@ public class AccountController {
 
     @GetMapping("/{id}")
     public ResponseEntity<AccountResponse> getAccount(@PathVariable UUID id) {
-        return ResponseEntity.ok(toResponse(accountService.getAccount(id)));
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        String username = authentication.getName();
+
+        UUID userId = userRepository.findByUsername(username)
+                .orElseThrow()
+                .getId();
+
+        return ResponseEntity.ok(
+                toResponse(accountService.getAccount(id, userId))
+        );
     }
 
     @GetMapping("/{id}/transactions")

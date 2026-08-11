@@ -30,6 +30,17 @@ public class Account {
     @Column(name = "owner_name", nullable = false)
     private String ownerName;
 
+    @Column(name = "owner_user_id")
+    private UUID ownerUserId;
+
+    public UUID getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(UUID ownerUserId) {
+        this.ownerUserId = ownerUserId;
+    }
+
     @Enumerated(EnumType.STRING)
     @Column(name = "account_type", nullable = false)
     private AccountType accountType;

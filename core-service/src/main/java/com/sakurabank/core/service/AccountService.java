@@ -3,6 +3,7 @@ package com.sakurabank.core.service;
 import com.sakurabank.core.SystemAccounts;
 import com.sakurabank.core.domain.Account;
 import com.sakurabank.core.domain.AccountNotFoundException;
+import com.sakurabank.core.domain.AccountOwnershipException;
 import com.sakurabank.core.domain.LedgerEntry;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
@@ -30,13 +31,12 @@ public class AccountService {
     }
 
     @Transactional
-    public Account openAccount(String ownerName) {
+    public Account openAccount(String ownerName, UUID ownerUserId) {
         String accountNumber = "ACC-" + UUID.randomUUID().toString()
                 .substring(0, 8).toUpperCase();
 
         Account account = new Account(accountNumber, ownerName);
-        // Tier 1 simplification: no separate KYC gate yet, so accounts
-        // are usable immediately after opening. See ROADMAP.md.
+        account.setOwnerUserId(ownerUserId);
         account.activate();
 
         return accountRepository.save(account);
@@ -56,6 +56,17 @@ public class AccountService {
 
         return accountRepository.findById(accountId)
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
+    }
+
+    public Account getAccount(UUID accountId, UUID userId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException(accountId));
+
+        if (!userId.equals(account.getOwnerUserId())) {
+            throw new AccountOwnershipException();
+        }
+
+        return account;
     }
 
     public Account getAccount(UUID accountId) {
