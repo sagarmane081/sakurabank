@@ -1,4 +1,8 @@
 package com.sakurabank.api.dto;
 
-public record LoginResponse (String token) {
+public record LoginResponse(
+        String token,
+        long expiresInSeconds,
+        String role
+) {
 }

@@ -80,7 +80,11 @@ class AuthControllerTest {
                 )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token")
-                        .value("test-jwt-token"));
+                        .value("test-jwt-token"))
+                .andExpect(jsonPath("$.expiresInSeconds")
+                        .value(900))
+                .andExpect(jsonPath("$.role")
+                        .value("CUSTOMER"));
     }
 
     @Test
@@ -160,6 +164,24 @@ class AuthControllerTest {
         LoginRequest request = new LoginRequest(
                 "customer",
                 ""
+        );
+
+        mockMvc.perform(
+                        post("/api/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        objectMapper.writeValueAsString(request)
+                                )
+                )
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void loginReturnsBadRequestWhenPasswordIsTooShort() throws Exception {
+
+        LoginRequest request = new LoginRequest(
+                "customer",
+                "short"
         );
 
         mockMvc.perform(
