@@ -1,10 +1,7 @@
 package com.sakurabank.core.service;
 
 import com.sakurabank.core.SystemAccounts;
-import com.sakurabank.core.domain.Account;
-import com.sakurabank.core.domain.AccountType;
-import com.sakurabank.core.domain.EntryType;
-import com.sakurabank.core.domain.LedgerEntry;
+import com.sakurabank.core.domain.*;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
@@ -18,6 +15,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.sakurabank.core.repository.UserRepository;
 
 @SpringBootTest
 @Transactional
@@ -29,6 +27,7 @@ class ReconciliationServiceTest {
     @Autowired LedgerEntryRepository ledgerEntryRepository;
     @Autowired TransferRepository transferRepository;
     @Autowired AccountService accountService;
+    @Autowired UserRepository userRepository;
 
     @BeforeEach
     void cleanUp() {
@@ -174,17 +173,28 @@ class ReconciliationServiceTest {
 
     @Test
     void depositCreatesBalancedLedgerEntriesUsingClearingAccount() {
+
+        User alice = userRepository.save(
+                new User(
+                        "alice-reconciliation",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
         Account account = new Account("ACC-10000001", "Alice");
         account.activate();
+        account.setOwnerUserId(alice.getId());
 
         Account saved = accountRepository.save(account);
 
         UUID key = UUID.randomUUID();
 
         accountService.deposit(
-                UUID.randomUUID(),
+                key,
                 saved.getId(),
-                new BigDecimal("500.00")
+                new BigDecimal("500.00"),
+                alice.getId()
         );
 
         var report = reconciliationService.reconcile();

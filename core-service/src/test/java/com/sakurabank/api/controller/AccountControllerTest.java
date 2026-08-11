@@ -117,10 +117,16 @@ class AccountControllerTest {
         account.activate();
         account.deposit(new BigDecimal("500.00"));
 
+        User user = customerUser();
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
         when(accountService.deposit(
                 any(UUID.class),
                 eq(accountId),
-                eq(new BigDecimal("500.00"))))
+                eq(new BigDecimal("500.00")),
+                eq(user.getId())))
                 .thenReturn(account);
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
@@ -140,7 +146,8 @@ class AccountControllerTest {
                 .deposit(
                         any(UUID.class),
                         eq(accountId),
-                        eq(new BigDecimal("500.00")));
+                        eq(new BigDecimal("500.00")),
+                        eq(user.getId()));
     }
 
     @Test
@@ -166,10 +173,16 @@ class AccountControllerTest {
 
         UUID accountId = UUID.randomUUID();
 
+        User user = customerUser();
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
         when(accountService.deposit(
                 any(UUID.class),
                 eq(accountId),
-                any(BigDecimal.class)))
+                any(BigDecimal.class),
+                eq(user.getId())))
                 .thenThrow(new AccountNotFoundException(accountId));
 
         mockMvc.perform(post("/api/accounts/{id}/deposit", accountId)
@@ -190,10 +203,16 @@ class AccountControllerTest {
 
         UUID accountId = UUID.randomUUID();
 
+        User user = customerUser();
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
         when(accountService.deposit(
                 any(UUID.class),
                 eq(accountId),
-                any(BigDecimal.class)))
+                any(BigDecimal.class),
+                eq(user.getId())))
                 .thenThrow(new InvalidAccountTransitionException(
                         AccountStatus.FROZEN,
                         "deposit"));
@@ -313,7 +332,14 @@ class AccountControllerTest {
 
         UUID accountId = UUID.randomUUID();
 
-        when(accountService.getTransactionHistory(accountId))
+        User user = customerUser();
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
+        when(accountService.getTransactionHistory(
+                eq(accountId),
+                eq(user.getId())))
                 .thenReturn(List.of());
 
         mockMvc.perform(
@@ -333,6 +359,11 @@ class AccountControllerTest {
         UUID accountId = UUID.randomUUID();
         UUID txId = UUID.randomUUID();
 
+        User user = customerUser();
+
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(user));
+
         LedgerEntry entry = org.mockito.Mockito.mock(LedgerEntry.class);
 
         when(entry.getId()).thenReturn(UUID.randomUUID());
@@ -340,7 +371,9 @@ class AccountControllerTest {
         when(entry.getAmount()).thenReturn(new BigDecimal("250.00"));
         when(entry.getEntryType()).thenReturn(com.sakurabank.core.domain.EntryType.DEBIT);
 
-        when(accountService.getTransactionHistory(accountId))
+        when(accountService.getTransactionHistory(
+                eq(accountId),
+                eq(user.getId())))
                 .thenReturn(List.of(entry));
 
         mockMvc.perform(
@@ -354,13 +387,85 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$[0].amount").value(250.00));
     }
 
-    private String customerToken() {
-        User user = new User(
+    private User customerUser() {
+        return new User(
                 "alice",
                 "already-hashed-password",
                 Role.CUSTOMER
         );
+    }
 
-        return jwtService.generateToken(user);
+    private String customerToken() {
+        return jwtService.generateToken(customerUser());
+    }
+
+    @Test
+    void customerCannotDepositIntoAnotherCustomersAccount() throws Exception {
+
+        UUID accountId = UUID.randomUUID();
+
+        User bob = new User(
+                "bob",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        when(userRepository.findByUsername("bob"))
+                .thenReturn(Optional.of(bob));
+
+        when(accountService.deposit(
+                any(UUID.class),
+                eq(accountId),
+                any(BigDecimal.class),
+                eq(bob.getId())))
+                .thenThrow(new AccountOwnershipException());
+
+        String token = jwtService.generateToken(bob);
+
+        mockMvc.perform(
+                        post("/api/accounts/{id}/deposit", accountId)
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + token
+                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(
+                                        new DepositRequest(
+                                                UUID.randomUUID(),
+                                                new BigDecimal("100.00")
+                                        )))
+                )
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void customerCannotReadAnotherCustomersTransactionHistory() throws Exception {
+
+        UUID accountId = UUID.randomUUID();
+
+        User bob = new User(
+                "bob",
+                "already-hashed-password",
+                Role.CUSTOMER
+        );
+
+        when(userRepository.findByUsername("bob"))
+                .thenReturn(Optional.of(bob));
+
+        when(accountService.getTransactionHistory(
+                eq(accountId),
+                eq(bob.getId())))
+                .thenThrow(new AccountOwnershipException());
+
+        String token = jwtService.generateToken(bob);
+
+        mockMvc.perform(
+                        get("/api/accounts/{id}/transactions", accountId)
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + token
+                                )
+                )
+                .andExpect(status().isForbidden());
     }
 }

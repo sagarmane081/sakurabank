@@ -79,7 +79,8 @@ class AccountServiceTest {
         Account funded = accountService.deposit(
                 UUID.randomUUID(),
                 opened.getId(),
-                new BigDecimal("500.00"));
+                new BigDecimal("500.00"),
+                aliceUserId);
 
         assertThat(funded.getBalance())
                 .isEqualByComparingTo("500.00");
@@ -107,7 +108,8 @@ class AccountServiceTest {
                 accountService.deposit(
                         UUID.randomUUID(),
                         id,
-                        new BigDecimal("100.00")))
+                        new BigDecimal("100.00"),
+                        aliceUserId))
                 .isInstanceOf(AccountNotFoundException.class);
     }
 
@@ -147,7 +149,7 @@ class AccountServiceTest {
         );
 
         List<LedgerEntry> history =
-                accountService.getTransactionHistory(account.getId());
+                accountService.getTransactionHistory(account.getId(), aliceUserId);
 
         assertThat(history).isEmpty();
     }
@@ -185,7 +187,8 @@ class AccountServiceTest {
         accountService.deposit(
                 UUID.randomUUID(),
                 from.getId(),
-                new BigDecimal("1000"));
+                new BigDecimal("1000"),
+                aliceUserId);
 
         transferService.transfer(
                 UUID.randomUUID(),
@@ -194,7 +197,7 @@ class AccountServiceTest {
                 new BigDecimal("250"));
 
         List<LedgerEntry> history =
-                accountService.getTransactionHistory(from.getId());
+                accountService.getTransactionHistory(from.getId(), aliceUserId);
 
         assertThat(history)
                 .hasSize(2);

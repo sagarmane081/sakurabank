@@ -53,11 +53,21 @@ public class AccountController {
             @PathVariable UUID id,
             @Valid @RequestBody DepositRequest request) {
 
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        String username = authentication.getName();
+
+        UUID userId = userRepository.findByUsername(username)
+                .orElseThrow()
+                .getId();
+
         return toResponse(
                 accountService.deposit(
                         request.idempotencyKey(),
                         id,
-                        request.amount()
+                        request.amount(),
+                        userId
                 )
         );
     }
@@ -80,10 +90,27 @@ public class AccountController {
     }
 
     @GetMapping("/{id}/transactions")
-    public ResponseEntity<List<LedgerEntryResponse>> getTransactions(@PathVariable UUID id) {
-        List<LedgerEntryResponse> response = accountService.getTransactionHistory(id).stream()
-                .map(e -> new LedgerEntryResponse(e.getId(), e.getTxId(), e.getEntryType().name(), e.getAmount()))
-                .collect(Collectors.toList());
+    public ResponseEntity<List<LedgerEntryResponse>> getTransactions(
+            @PathVariable UUID id) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        String username = authentication.getName();
+
+        UUID userId = userRepository.findByUsername(username)
+                .orElseThrow()
+                .getId();
+
+        List<LedgerEntryResponse> response =
+                accountService.getTransactionHistory(id, userId).stream()
+                        .map(e -> new LedgerEntryResponse(
+                                e.getId(),
+                                e.getTxId(),
+                                e.getEntryType().name(),
+                                e.getAmount()))
+                        .collect(Collectors.toList());
+
         return ResponseEntity.ok(response);
     }
 

@@ -46,7 +46,16 @@ public class AccountService {
     public Account deposit(
             UUID idempotencyKey,
             UUID accountId,
-            BigDecimal amount) {
+            BigDecimal amount,
+            UUID userId) {
+
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException(accountId));
+
+        if (!userId.equals(account.getOwnerUserId())) {
+            throw new AccountOwnershipException();
+        }
+
         transferService.internalTransfer(
                 idempotencyKey,
                 SystemAccounts.CLEARING_ACCOUNT_ID,
@@ -74,7 +83,17 @@ public class AccountService {
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
     }
 
-    public List<LedgerEntry> getTransactionHistory(UUID accountId) {
+    public List<LedgerEntry> getTransactionHistory(
+            UUID accountId,
+            UUID userId) {
+
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException(accountId));
+
+        if (!userId.equals(account.getOwnerUserId())) {
+            throw new AccountOwnershipException();
+        }
+
         return ledgerEntryRepository.findByAccountId(accountId);
     }
 }
