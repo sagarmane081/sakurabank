@@ -281,4 +281,100 @@ class AccountServiceTest {
                         bob.getId()))
                 .isInstanceOf(AccountOwnershipException.class);
     }
+
+    @Test
+    void depositRejectsWhenCallerIsNotAccountOwner() {
+
+        User alice = userRepository.save(
+                new User(
+                        "alice",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        User bob = userRepository.save(
+                new User(
+                        "bob",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        Account aliceAccount = accountService.openAccount(
+                "Alice",
+                alice.getId()
+        );
+
+        assertThatThrownBy(() ->
+                accountService.deposit(
+                        UUID.randomUUID(),
+                        aliceAccount.getId(),
+                        new BigDecimal("100.00"),
+                        bob.getId()
+                )
+        )
+                .isInstanceOf(AccountOwnershipException.class);
+    }
+
+    @Test
+    void getTransactionHistoryRejectsWhenCallerIsNotOwner() {
+
+        User alice = userRepository.save(
+                new User(
+                        "alice",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        User bob = userRepository.save(
+                new User(
+                        "bob",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        Account aliceAccount = accountService.openAccount(
+                "Alice",
+                alice.getId()
+        );
+
+        assertThatThrownBy(() ->
+                accountService.getTransactionHistory(
+                        aliceAccount.getId(),
+                        bob.getId()
+                )
+        )
+                .isInstanceOf(AccountOwnershipException.class);
+    }
+
+    @Test
+    void getAccountTwoArgReturnsAccountForOwner() {
+
+        User alice = userRepository.save(
+                new User(
+                        "alice",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        Account aliceAccount = accountService.openAccount(
+                "Alice",
+                alice.getId()
+        );
+
+        Account result = accountService.getAccount(
+                aliceAccount.getId(),
+                alice.getId()
+        );
+
+        assertThat(result.getId())
+                .isEqualTo(aliceAccount.getId());
+
+        assertThat(result.getOwnerUserId())
+                .isEqualTo(alice.getId());
+    }
 }

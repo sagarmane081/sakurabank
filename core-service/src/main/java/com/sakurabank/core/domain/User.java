@@ -2,6 +2,8 @@ package com.sakurabank.core.domain;
 
 import jakarta.persistence.*;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -22,6 +24,12 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
     private Role role;
+
+    @Column(name = "failed_login_attempts", nullable = false)
+    private int failedLoginAttempts;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
 
     protected User() {}
 
@@ -56,6 +64,40 @@ public class User {
 
         this.username = username;
         this.passwordHash = passwordHash;
+    }
+
+    public void recordFailedLogin(Instant now) {
+        Objects.requireNonNull(now, "now must not be null");
+
+        if (isLocked(now)) {
+            return;
+        }
+
+        failedLoginAttempts++;
+
+        if (failedLoginAttempts >= 3) {
+            lockedUntil = now.plus(24, ChronoUnit.HOURS);
+        }
+    }
+
+    public boolean isLocked(Instant now) {
+        Objects.requireNonNull(now, "now must not be null");
+
+        return lockedUntil != null
+                && lockedUntil.isAfter(now);
+    }
+
+    public void resetLoginFailures() {
+        failedLoginAttempts = 0;
+        lockedUntil = null;
+    }
+
+    public int getFailedLoginAttempts() {
+        return failedLoginAttempts;
+    }
+
+    public Instant getLockedUntil() {
+        return lockedUntil;
     }
 
     public UUID getId() {

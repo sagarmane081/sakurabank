@@ -227,4 +227,60 @@ class ReconciliationServiceTest {
                             .isEqualByComparingTo("500.00");
                 });
     }
+
+    @Test
+    void reconcileFlagsHiddenImbalanceWhenGloballyBalancedButIndividualTransactionsAreBroken() {
+
+        Account debitAccount =
+                accountRepository.save(
+                        new Account(
+                                "ACC-10000001",
+                                "Alice"
+                        )
+                );
+
+        Account creditAccount =
+                accountRepository.save(
+                        new Account(
+                                "ACC-10000002",
+                                "Bob"
+                        )
+                );
+
+        UUID debitOnlyTransactionId = UUID.randomUUID();
+        UUID creditOnlyTransactionId = UUID.randomUUID();
+
+        ledgerEntryRepository.save(
+                new LedgerEntry(
+                        debitOnlyTransactionId,
+                        debitAccount.getId(),
+                        EntryType.DEBIT,
+                        new BigDecimal("100.00")
+                )
+        );
+
+        ledgerEntryRepository.save(
+                new LedgerEntry(
+                        creditOnlyTransactionId,
+                        creditAccount.getId(),
+                        EntryType.CREDIT,
+                        new BigDecimal("100.00")
+                )
+        );
+
+        ReconciliationService.ReconciliationReport report =
+                reconciliationService.reconcile();
+
+        assertThat(report.globallyBalanced())
+                .isTrue();
+
+        assertThat(report.unbalancedTransactionIds())
+                .containsExactlyInAnyOrder(
+                        debitOnlyTransactionId,
+                        creditOnlyTransactionId
+                );
+
+        assertThat(report.isClean())
+                .isFalse();
+    }
 }
