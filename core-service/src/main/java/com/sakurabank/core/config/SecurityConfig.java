@@ -42,8 +42,21 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers("/api/reconciliation")
-                        .hasAnyRole("ADMIN", "COMPLIANCE_OFFICER")
+                        .hasAnyRole(
+                                "ADMIN",
+                                "COMPLIANCE_OFFICER"
+                        )
 
+                        .requestMatchers(
+                                "/api/kyc/*/approve",
+                                "/api/kyc/*/reject"
+                        )
+                        .hasRole("COMPLIANCE_OFFICER")
+
+                        .requestMatchers("/api/kyc/submit")
+                        .hasRole("CUSTOMER")
+                        .requestMatchers("/api/aml/**")
+                        .hasRole("COMPLIANCE_OFFICER")
                         .anyRequest().authenticated()
                 )
 

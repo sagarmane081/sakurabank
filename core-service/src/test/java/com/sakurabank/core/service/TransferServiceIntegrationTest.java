@@ -5,7 +5,7 @@ import com.sakurabank.core.domain.*;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
-import org.junit.jupiter.api.AfterEach;
+import com.sakurabank.core.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Transactional
@@ -35,6 +35,9 @@ class TransferServiceIntegrationTest {
     @Autowired
     private LedgerEntryRepository ledgerEntryRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @BeforeEach
     void cleanUp() {
         transferRepository.deleteAll();
@@ -45,9 +48,17 @@ class TransferServiceIntegrationTest {
     @Test
     void transferMovesMoneyAndCreatesLedgerEntries() {
 
-        // Arrange
+        User alice = userRepository.save(
+                new User(
+                        "alice-transfer-integration-1",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
         Account from = new Account("ACC-001", "Alice");
         from.activate();
+        from.setOwnerUserId(alice.getId());
         from.deposit(new BigDecimal("100.00"));
 
         Account to = new Account("ACC-002", "Bob");
@@ -56,22 +67,23 @@ class TransferServiceIntegrationTest {
         Account savedFrom = accountRepository.save(from);
         Account savedTo = accountRepository.save(to);
 
-        // Act
         UUID key = UUID.randomUUID();
 
         transferService.transfer(
                 key,
                 savedFrom.getId(),
                 savedTo.getId(),
-                new BigDecimal("40.00")
+                new BigDecimal("40.00"),
+                alice.getId()
         );
 
-        // Assert
-        Account updatedFrom = accountRepository.findById(savedFrom.getId())
-                .orElseThrow();
+        Account updatedFrom =
+                accountRepository.findById(savedFrom.getId())
+                        .orElseThrow();
 
-        Account updatedTo = accountRepository.findById(savedTo.getId())
-                .orElseThrow();
+        Account updatedTo =
+                accountRepository.findById(savedTo.getId())
+                        .orElseThrow();
 
         assertThat(updatedFrom.getBalance())
                 .isEqualByComparingTo("60.00");
@@ -79,7 +91,8 @@ class TransferServiceIntegrationTest {
         assertThat(updatedTo.getBalance())
                 .isEqualByComparingTo("40.00");
 
-        List<LedgerEntry> entries = ledgerEntryRepository.findAll();
+        List<LedgerEntry> entries =
+                ledgerEntryRepository.findAll();
 
         assertThat(entries).hasSize(2);
 
@@ -93,16 +106,21 @@ class TransferServiceIntegrationTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(debit.getAccountId()).isEqualTo(savedFrom.getId());
-        assertThat(credit.getAccountId()).isEqualTo(savedTo.getId());
+        assertThat(debit.getAccountId())
+                .isEqualTo(savedFrom.getId());
 
-        assertThat(debit.getAmount()).isEqualByComparingTo("40.00");
-        assertThat(credit.getAmount()).isEqualByComparingTo("40.00");
+        assertThat(credit.getAccountId())
+                .isEqualTo(savedTo.getId());
+
+        assertThat(debit.getAmount())
+                .isEqualByComparingTo("40.00");
+
+        assertThat(credit.getAmount())
+                .isEqualByComparingTo("40.00");
 
         assertThat(debit.getTxId())
                 .isEqualTo(credit.getTxId());
 
-        // Verify that a Transfer record was persisted.
         assertThat(transferRepository.findAll())
                 .hasSize(1);
 
@@ -116,9 +134,17 @@ class TransferServiceIntegrationTest {
     @Test
     void failedTransferLeavesDatabaseUnchanged() {
 
-        // Arrange
+        User alice = userRepository.save(
+                new User(
+                        "alice-transfer-integration-2",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
         Account from = new Account("ACC-001", "Alice");
         from.activate();
+        from.setOwnerUserId(alice.getId());
         from.deposit(new BigDecimal("50.00"));
 
         Account to = new Account("ACC-002", "Bob");
@@ -127,17 +153,16 @@ class TransferServiceIntegrationTest {
         Account savedFrom = accountRepository.save(from);
         Account savedTo = accountRepository.save(to);
 
-        // Act + Assert
         assertThatThrownBy(() ->
                 transferService.transfer(
                         UUID.randomUUID(),
                         savedFrom.getId(),
                         savedTo.getId(),
-                        new BigDecimal("100.00")
+                        new BigDecimal("100.00"),
+                        alice.getId()
                 ))
                 .isInstanceOf(InsufficientFundsException.class);
 
-        // Reload from DB
         Account updatedFrom =
                 accountRepository.findById(savedFrom.getId())
                         .orElseThrow();
@@ -159,42 +184,43 @@ class TransferServiceIntegrationTest {
     @Test
     void sameIdempotencyKeyExecutesTransferOnlyOnce() {
 
-        // Arrange
-        // Create a source account with an initial balance.
+        User alice = userRepository.save(
+                new User(
+                        "alice-transfer-integration-3",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
         Account from = new Account("ACC-001", "Alice");
         from.activate();
+        from.setOwnerUserId(alice.getId());
         from.deposit(new BigDecimal("100.00"));
 
-        // Create a destination account.
         Account to = new Account("ACC-002", "Bob");
         to.activate();
 
-        // Persist both accounts.
         Account savedFrom = accountRepository.save(from);
         Account savedTo = accountRepository.save(to);
 
-        // Use the SAME idempotency key for both transfer requests.
         UUID key = UUID.randomUUID();
 
-        // Act
-        // First request should execute normally.
         transferService.transfer(
                 key,
                 savedFrom.getId(),
                 savedTo.getId(),
-                new BigDecimal("40.00")
+                new BigDecimal("40.00"),
+                alice.getId()
         );
 
-        // Second request has the same key.
-        // This should be treated as a replay and ignored.
         transferService.transfer(
                 key,
                 savedFrom.getId(),
                 savedTo.getId(),
-                new BigDecimal("40.00")
+                new BigDecimal("40.00"),
+                alice.getId()
         );
 
-        // Reload the accounts from the database.
         Account updatedFrom =
                 accountRepository.findById(savedFrom.getId())
                         .orElseThrow();
@@ -203,18 +229,15 @@ class TransferServiceIntegrationTest {
                 accountRepository.findById(savedTo.getId())
                         .orElseThrow();
 
-        // Balance should change ONLY ONCE.
         assertThat(updatedFrom.getBalance())
                 .isEqualByComparingTo("60.00");
 
         assertThat(updatedTo.getBalance())
                 .isEqualByComparingTo("40.00");
 
-        // Only one transfer should have produced ledger entries.
         assertThat(ledgerEntryRepository.findAll())
                 .hasSize(2);
 
-        // Only one Transfer row should exist.
         assertThat(transferRepository.findAll())
                 .hasSize(1);
     }
@@ -222,9 +245,17 @@ class TransferServiceIntegrationTest {
     @Test
     void differentIdempotencyKeysExecuteTransferTwice() {
 
-        // Arrange
+        User alice = userRepository.save(
+                new User(
+                        "alice-transfer-integration-4",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
         Account from = new Account("ACC-001", "Alice");
         from.activate();
+        from.setOwnerUserId(alice.getId());
         from.deposit(new BigDecimal("100.00"));
 
         Account to = new Account("ACC-002", "Bob");
@@ -233,26 +264,25 @@ class TransferServiceIntegrationTest {
         Account savedFrom = accountRepository.save(from);
         Account savedTo = accountRepository.save(to);
 
-        // Use two different idempotency keys.
         UUID firstKey = UUID.randomUUID();
         UUID secondKey = UUID.randomUUID();
 
-        // Act
         transferService.transfer(
                 firstKey,
                 savedFrom.getId(),
                 savedTo.getId(),
-                new BigDecimal("20.00")
+                new BigDecimal("20.00"),
+                alice.getId()
         );
 
         transferService.transfer(
                 secondKey,
                 savedFrom.getId(),
                 savedTo.getId(),
-                new BigDecimal("20.00")
+                new BigDecimal("20.00"),
+                alice.getId()
         );
 
-        // Reload accounts.
         Account updatedFrom =
                 accountRepository.findById(savedFrom.getId())
                         .orElseThrow();
@@ -261,18 +291,15 @@ class TransferServiceIntegrationTest {
                 accountRepository.findById(savedTo.getId())
                         .orElseThrow();
 
-        // Two different requests should execute independently.
         assertThat(updatedFrom.getBalance())
                 .isEqualByComparingTo("60.00");
 
         assertThat(updatedTo.getBalance())
                 .isEqualByComparingTo("40.00");
 
-        // Two transfers create four ledger entries.
         assertThat(ledgerEntryRepository.findAll())
                 .hasSize(4);
 
-        // Two Transfer rows should exist.
         assertThat(transferRepository.findAll())
                 .hasSize(2);
     }
@@ -280,24 +307,41 @@ class TransferServiceIntegrationTest {
     @Test
     void publicTransferRejectsSystemAccountAsSource() {
 
-        Account customer = new Account("ACC-001", "Alice");
+        User alice = userRepository.save(
+                new User(
+                        "alice-transfer-integration-5",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        Account customer = new Account(
+                "ACC-001",
+                "Alice"
+        );
         customer.activate();
+        customer.setOwnerUserId(alice.getId());
 
-        Account savedCustomer = accountRepository.save(customer);
+        Account savedCustomer =
+                accountRepository.save(customer);
 
-        // Act + Assert
         assertThatThrownBy(() ->
                 transferService.transfer(
                         UUID.randomUUID(),
                         SystemAccounts.CLEARING_ACCOUNT_ID,
                         savedCustomer.getId(),
-                        new BigDecimal("100.00")
+                        new BigDecimal("100.00"),
+                        alice.getId()
                 ))
-                .isInstanceOf(SystemAccountTransferNotAllowedException.class);
+                .isInstanceOf(
+                        SystemAccountTransferNotAllowedException.class
+                );
 
-        // Nothing should have been persisted.
-        assertThat(transferRepository.findAll()).isEmpty();
-        assertThat(ledgerEntryRepository.findAll()).isEmpty();
+        assertThat(transferRepository.findAll())
+                .isEmpty();
+
+        assertThat(ledgerEntryRepository.findAll())
+                .isEmpty();
 
         Account reloaded =
                 accountRepository.findById(savedCustomer.getId())
@@ -310,24 +354,41 @@ class TransferServiceIntegrationTest {
     @Test
     void publicTransferRejectsSystemAccountAsTransferDestination() {
 
-        Account customer = new Account("ACC-001", "Alice");
+        User alice = userRepository.save(
+                new User(
+                        "alice-transfer-integration-6",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        Account customer = new Account(
+                "ACC-001",
+                "Alice"
+        );
         customer.activate();
+        customer.setOwnerUserId(alice.getId());
 
-        Account savedCustomer = accountRepository.save(customer);
+        Account savedCustomer =
+                accountRepository.save(customer);
 
-        // Act + Assert
         assertThatThrownBy(() ->
                 transferService.transfer(
                         UUID.randomUUID(),
                         savedCustomer.getId(),
                         SystemAccounts.CLEARING_ACCOUNT_ID,
-                        new BigDecimal("10.00")
+                        new BigDecimal("10.00"),
+                        alice.getId()
                 ))
-                .isInstanceOf(SystemAccountTransferNotAllowedException.class);
+                .isInstanceOf(
+                        SystemAccountTransferNotAllowedException.class
+                );
 
-        // Nothing should have been persisted.
-        assertThat(transferRepository.findAll()).isEmpty();
-        assertThat(ledgerEntryRepository.findAll()).isEmpty();
+        assertThat(transferRepository.findAll())
+                .isEmpty();
+
+        assertThat(ledgerEntryRepository.findAll())
+                .isEmpty();
 
         Account reloaded =
                 accountRepository.findById(savedCustomer.getId())

@@ -194,7 +194,9 @@ class AccountServiceTest {
                 UUID.randomUUID(),
                 from.getId(),
                 to.getId(),
-                new BigDecimal("250"));
+                new BigDecimal("250"),
+                aliceUserId
+        );
 
         List<LedgerEntry> history =
                 accountService.getTransactionHistory(from.getId(), aliceUserId);

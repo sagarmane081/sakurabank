@@ -38,25 +38,67 @@ class ReconciliationServiceTest {
 
     @Test
     void ledgerIsCleanAfterSeveralTransfers() {
+
+        User alice = userRepository.save(
+                new User(
+                        "alice-reconciliation-transfer",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
         Account a = new Account("ACC-A", "Alice");
         a.activate();
+        a.setOwnerUserId(alice.getId());
         a.deposit(new BigDecimal("1000.00"));
 
         Account b = new Account("ACC-B", "Bob");
         b.activate();
 
+        User bob = userRepository.save(
+                new User(
+                        "bob-reconciliation-transfer",
+                        "already-hashed-password",
+                        Role.CUSTOMER
+                )
+        );
+
+        b.setOwnerUserId(bob.getId());
+
         Account savedA = accountRepository.save(a);
         Account savedB = accountRepository.save(b);
 
-        transferService.transfer(UUID.randomUUID(), savedA.getId(), savedB.getId(), new BigDecimal("100.00"));
-        transferService.transfer(UUID.randomUUID(), savedA.getId(), savedB.getId(), new BigDecimal("50.00"));
-        transferService.transfer(UUID.randomUUID(), savedB.getId(), savedA.getId(), new BigDecimal("25.00"));
+        transferService.transfer(
+                UUID.randomUUID(),
+                savedA.getId(),
+                savedB.getId(),
+                new BigDecimal("100.00"),
+                alice.getId()
+        );
+
+        transferService.transfer(
+                UUID.randomUUID(),
+                savedA.getId(),
+                savedB.getId(),
+                new BigDecimal("50.00"),
+                alice.getId()
+        );
+
+        transferService.transfer(
+                UUID.randomUUID(),
+                savedB.getId(),
+                savedA.getId(),
+                new BigDecimal("25.00"),
+                bob.getId()
+        );
 
         var report = reconciliationService.reconcile();
 
         assertThat(report.isClean()).isTrue();
-        assertThat(report.totalDebits()).isEqualByComparingTo(report.totalCredits());
-        assertThat(report.unbalancedTransactionIds()).isEmpty();
+        assertThat(report.totalDebits())
+                .isEqualByComparingTo(report.totalCredits());
+        assertThat(report.unbalancedTransactionIds())
+                .isEmpty();
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.sakurabank.core.domain.*;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
+import com.sakurabank.core.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +25,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class TransferServiceTest {
 
+    private static final UUID CALLER_USER_ID =
+            UUID.fromString(
+                    "10000000-0000-0000-0000-000000000001"
+            );
+
     @Mock
     private TransferRepository transferRepository;
 
@@ -33,13 +39,29 @@ class TransferServiceTest {
     @Mock
     private LedgerEntryRepository ledgerEntryRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private AmlMonitoringService amlMonitoringService;
+
     @InjectMocks
     private TransferService transferService;
 
     @BeforeEach
     void setUp() {
-        when(transferRepository.findByIdempotencyKey(any(UUID.class)))
-                .thenReturn(Optional.empty());
+
+        when(
+                transferRepository.findByIdempotencyKey(
+                        any(UUID.class)
+                )
+        ).thenReturn(Optional.empty());
+
+        ReflectionTestUtils.setField(
+                transferService,
+                "kycTransferThreshold",
+                new BigDecimal("100000.00")
+        );
     }
 
     @Test
@@ -48,15 +70,27 @@ class TransferServiceTest {
         UUID fromId = UUID.randomUUID();
         UUID toId = UUID.randomUUID();
 
-        Account from = new Account("ACC-001", "Alice");
+        Account from =
+                new Account("ACC-001", "Alice");
         from.activate();
+        from.setOwnerUserId(CALLER_USER_ID);
         from.deposit(new BigDecimal("100.00"));
 
-        Account to = new Account("ACC-002", "Bob");
+        Account to =
+                new Account("ACC-002", "Bob");
         to.activate();
 
-        ReflectionTestUtils.setField(from, "id", fromId);
-        ReflectionTestUtils.setField(to, "id", toId);
+        ReflectionTestUtils.setField(
+                from,
+                "id",
+                fromId
+        );
+
+        ReflectionTestUtils.setField(
+                to,
+                "id",
+                toId
+        );
 
         when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.of(from));
@@ -68,7 +102,8 @@ class TransferServiceTest {
                 UUID.randomUUID(),
                 fromId,
                 toId,
-                new BigDecimal("40.00")
+                new BigDecimal("40.00"),
+                CALLER_USER_ID
         );
 
         assertThat(from.getBalance())
@@ -88,15 +123,26 @@ class TransferServiceTest {
         UUID fromId = UUID.randomUUID();
         UUID toId = UUID.randomUUID();
 
-        Account from = new Account("ACC-001", "Alice");
+        Account from =
+                new Account("ACC-001", "Alice");
         from.activate();
-        // Balance = 0
+        from.setOwnerUserId(CALLER_USER_ID);
 
-        Account to = new Account("ACC-002", "Bob");
+        Account to =
+                new Account("ACC-002", "Bob");
         to.activate();
 
-        ReflectionTestUtils.setField(from, "id", fromId);
-        ReflectionTestUtils.setField(to, "id", toId);
+        ReflectionTestUtils.setField(
+                from,
+                "id",
+                fromId
+        );
+
+        ReflectionTestUtils.setField(
+                to,
+                "id",
+                toId
+        );
 
         when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.of(from));
@@ -109,19 +155,32 @@ class TransferServiceTest {
                         UUID.randomUUID(),
                         fromId,
                         toId,
-                        new BigDecimal("100.00")
+                        new BigDecimal("100.00"),
+                        CALLER_USER_ID
                 ))
-                .isInstanceOf(InsufficientFundsException.class);
+                .isInstanceOf(
+                        InsufficientFundsException.class
+                );
 
-        verify(accountRepository, never()).save(any(Account.class));
-        verify(ledgerEntryRepository, never()).saveAll(any());
+        verify(accountRepository, never())
+                .save(any(Account.class));
+
+        verify(ledgerEntryRepository, never())
+                .saveAll(any());
     }
 
     @Test
     void throwsWhenSourceAccountDoesNotExist() {
 
-        UUID fromId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        UUID toId   = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID fromId =
+                UUID.fromString(
+                        "00000000-0000-0000-0000-000000000001"
+                );
+
+        UUID toId =
+                UUID.fromString(
+                        "00000000-0000-0000-0000-000000000002"
+                );
 
         when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.empty());
@@ -131,9 +190,12 @@ class TransferServiceTest {
                         UUID.randomUUID(),
                         fromId,
                         toId,
-                        new BigDecimal("100.00")
+                        new BigDecimal("100.00"),
+                        CALLER_USER_ID
                 ))
-                .isInstanceOf(AccountNotFoundException.class);
+                .isInstanceOf(
+                        AccountNotFoundException.class
+                );
 
         verifyNoInteractions(ledgerEntryRepository);
     }
@@ -141,13 +203,26 @@ class TransferServiceTest {
     @Test
     void throwsWhenDestinationAccountDoesNotExist() {
 
-        UUID fromId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        UUID toId   = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID fromId =
+                UUID.fromString(
+                        "00000000-0000-0000-0000-000000000001"
+                );
 
-        Account from = new Account("ACC-001", "Alice");
+        UUID toId =
+                UUID.fromString(
+                        "00000000-0000-0000-0000-000000000002"
+                );
+
+        Account from =
+                new Account("ACC-001", "Alice");
         from.activate();
+        from.setOwnerUserId(CALLER_USER_ID);
 
-        ReflectionTestUtils.setField(from, "id", fromId);
+        ReflectionTestUtils.setField(
+                from,
+                "id",
+                fromId
+        );
 
         when(accountRepository.findByIdForUpdate(fromId))
                 .thenReturn(Optional.of(from));
@@ -160,12 +235,18 @@ class TransferServiceTest {
                         UUID.randomUUID(),
                         fromId,
                         toId,
-                        new BigDecimal("100.00")
+                        new BigDecimal("100.00"),
+                        CALLER_USER_ID
                 ))
-                .isInstanceOf(AccountNotFoundException.class);
+                .isInstanceOf(
+                        AccountNotFoundException.class
+                );
 
-        verify(accountRepository, never()).save(any(Account.class));
-        verify(ledgerEntryRepository, never()).saveAll(any());
+        verify(accountRepository, never())
+                .save(any(Account.class));
+
+        verify(ledgerEntryRepository, never())
+                .saveAll(any());
     }
 
     @Test
@@ -178,10 +259,16 @@ class TransferServiceTest {
                         UUID.randomUUID(),
                         accountId,
                         accountId,
-                        new BigDecimal("100.00")
+                        new BigDecimal("100.00"),
+                        CALLER_USER_ID
                 ))
-                .isInstanceOf(InvalidTransferException.class)
-                .hasMessage("Cannot transfer funds to the same account: " + accountId);
+                .isInstanceOf(
+                        InvalidTransferException.class
+                )
+                .hasMessage(
+                        "Cannot transfer funds to the same account: "
+                                + accountId
+                );
 
         verifyNoInteractions(accountRepository);
         verifyNoInteractions(ledgerEntryRepository);
@@ -192,30 +279,32 @@ class TransferServiceTest {
 
         UUID key = UUID.randomUUID();
 
-        // Pretend that this idempotency key has already been processed.
-        Transfer existingTransfer = new Transfer(
-                key,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                new BigDecimal("100.00")
-        );
+        Transfer existingTransfer =
+                new Transfer(
+                        key,
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        new BigDecimal("100.00")
+                );
 
-        when(transferRepository.findByIdempotencyKey(key))
-                .thenReturn(Optional.of(existingTransfer));
+        when(
+                transferRepository.findByIdempotencyKey(key)
+        ).thenReturn(Optional.of(existingTransfer));
 
-        // Act
         transferService.transfer(
                 key,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                new BigDecimal("100.00")
+                new BigDecimal("100.00"),
+                CALLER_USER_ID
         );
 
-        // Verify that nothing else happened.
         verifyNoInteractions(accountRepository);
         verifyNoInteractions(ledgerEntryRepository);
 
-        // The replay path must not create a second Transfer record.
-        verify(transferRepository, never()).save(any());
+        verify(
+                transferRepository,
+                never()
+        ).save(any());
     }
 }

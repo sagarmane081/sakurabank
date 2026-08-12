@@ -1,11 +1,23 @@
 package com.sakurabank.core.service;
 
-import com.sakurabank.core.domain.*;
+import com.sakurabank.core.domain.Account;
+import com.sakurabank.core.domain.AccountNotFoundException;
+import com.sakurabank.core.domain.AccountOwnershipException;
+import com.sakurabank.core.domain.AccountType;
+import com.sakurabank.core.domain.InvalidTransferException;
+import com.sakurabank.core.domain.KycStatus;
+import com.sakurabank.core.domain.KycTransferRestrictionException;
+import com.sakurabank.core.domain.LedgerEntry;
+import com.sakurabank.core.domain.SystemAccountTransferNotAllowedException;
+import com.sakurabank.core.domain.Transfer;
+import com.sakurabank.core.domain.User;
 import com.sakurabank.core.repository.AccountRepository;
 import com.sakurabank.core.repository.LedgerEntryRepository;
 import com.sakurabank.core.repository.TransferRepository;
-import org.springframework.transaction.annotation.Transactional;
+import com.sakurabank.core.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -18,30 +30,56 @@ public class TransferService {
     private final AccountRepository accountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final TransferRepository transferRepository;
+    private final UserRepository userRepository;
+    private final BigDecimal kycTransferThreshold;
+    private final AmlMonitoringService amlMonitoringService;
 
-    public TransferService(AccountRepository accountRepository,
-                           LedgerEntryRepository ledgerEntryRepository, TransferRepository transferRepository) {
+    public TransferService(
+            AccountRepository accountRepository,
+            LedgerEntryRepository ledgerEntryRepository,
+            TransferRepository transferRepository,
+            UserRepository userRepository,
+            @Value("${kyc.transfer-threshold}") BigDecimal kycTransferThreshold,
+            AmlMonitoringService amlMonitoringService) {
+
         this.accountRepository = accountRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.transferRepository = transferRepository;
+        this.userRepository = userRepository;
+        this.kycTransferThreshold = kycTransferThreshold;
+        this.amlMonitoringService = amlMonitoringService;
     }
 
+    /**
+     * Customer transfer.
+     *
+     * The caller identity is mandatory and is supplied by the API layer
+     * from the authenticated principal.
+     */
     @Transactional
     public void transfer(
             UUID idempotencyKey,
             UUID fromAccountId,
             UUID toAccountId,
-            BigDecimal amount) {
+            BigDecimal amount,
+            UUID callerUserId) {
 
         doTransfer(
                 idempotencyKey,
                 fromAccountId,
                 toAccountId,
                 amount,
+                callerUserId,
                 true
         );
     }
 
+    /**
+     * Internal bank transfer.
+     *
+     * Used for system operations such as funding customer accounts.
+     * Customer ownership checks and AML monitoring are intentionally skipped.
+     */
     @Transactional
     public void internalTransfer(
             UUID idempotencyKey,
@@ -54,6 +92,7 @@ public class TransferService {
                 fromAccountId,
                 toAccountId,
                 amount,
+                null,
                 false
         );
     }
@@ -63,28 +102,28 @@ public class TransferService {
             UUID fromAccountId,
             UUID toAccountId,
             BigDecimal amount,
-            boolean rejectSystemAccounts)
-    {
+            UUID callerUserId,
+            boolean customerTransfer) {
+
         Optional<Transfer> existing =
                 transferRepository.findByIdempotencyKey(idempotencyKey);
 
         if (existing.isPresent()) {
-
-            // TODO:
-            // Currently we treat any repeated idempotency key as a successful replay.
-            // We do not yet verify that the incoming request matches the original
-            // request (same source account, destination account, amount, etc.).
-            // A production-grade implementation should compare the payload and
-            // reject conflicting requests that reuse an existing idempotency key.
-
             return;
         }
 
+        /*
+         * Validate the transfer identity before any database lookup.
+         */
         if (fromAccountId.equals(toAccountId)) {
             throw new InvalidTransferException(fromAccountId);
         }
 
-        // 1. Determine lock order
+        /*
+         * Lock both accounts in deterministic order.
+         * This prevents deadlocks when opposite-direction transfers
+         * occur concurrently.
+         */
         UUID firstId;
         UUID secondId;
 
@@ -96,16 +135,16 @@ public class TransferService {
             secondId = fromAccountId;
         }
 
-        // 2. Lock in deterministic order
-        Account first = accountRepository.findByIdForUpdate(firstId)
+        Account first = accountRepository
+                .findByIdForUpdate(firstId)
                 .orElseThrow(() ->
                         new AccountNotFoundException(firstId));
 
-        Account second = accountRepository.findByIdForUpdate(secondId)
+        Account second = accountRepository
+                .findByIdForUpdate(secondId)
                 .orElseThrow(() ->
                         new AccountNotFoundException(secondId));
 
-        // 3. Map back to business meaning
         Account from;
         Account to;
 
@@ -117,23 +156,73 @@ public class TransferService {
             to = first;
         }
 
-        if (rejectSystemAccounts) {
+        /*
+         * System-account protection comes before customer ownership.
+         * A public/customer transfer must never move money to or from
+         * a SYSTEM account.
+         */
+        if (customerTransfer) {
 
             if (from.getAccountType() == AccountType.SYSTEM) {
-                throw new SystemAccountTransferNotAllowedException(from.getId());
+                throw new SystemAccountTransferNotAllowedException(
+                        from.getId()
+                );
             }
 
             if (to.getAccountType() == AccountType.SYSTEM) {
-                throw new SystemAccountTransferNotAllowedException(to.getId());
+                throw new SystemAccountTransferNotAllowedException(
+                        to.getId()
+                );
             }
         }
 
+        /*
+         * CRITICAL SECURITY CHECK:
+         *
+         * The authenticated caller must own the source account.
+         */
+        if (customerTransfer) {
+
+            UUID ownerUserId = from.getOwnerUserId();
+
+            if (ownerUserId == null
+                    || callerUserId == null
+                    || !ownerUserId.equals(callerUserId)) {
+
+                throw new AccountOwnershipException();
+            }
+        }
+
+        /*
+         * KYC restriction:
+         *
+         * UNVERIFIED customers cannot transfer more than the configured
+         * threshold.
+         */
+        if (customerTransfer
+                && amount.compareTo(kycTransferThreshold) > 0) {
+
+            User owner = userRepository.findById(
+                    from.getOwnerUserId()
+            ).orElseThrow();
+
+            if (owner.getKycStatus() == KycStatus.UNVERIFIED) {
+                throw new KycTransferRestrictionException();
+            }
+        }
+
+        /*
+         * Move money.
+         */
         from.withdraw(amount);
         to.deposit(amount);
 
         accountRepository.save(from);
         accountRepository.save(to);
 
+        /*
+         * Create balanced double-entry ledger records.
+         */
         List<LedgerEntry> entries =
                 LedgerEntry.transferPair(
                         from.getId(),
@@ -143,7 +232,10 @@ public class TransferService {
 
         ledgerEntryRepository.saveAll(entries);
 
-        transferRepository.save(
+        /*
+         * Persist the transfer after the balance/ledger updates.
+         */
+        Transfer savedTransfer = transferRepository.save(
                 new Transfer(
                         idempotencyKey,
                         from.getId(),
@@ -151,5 +243,16 @@ public class TransferService {
                         amount
                 )
         );
+
+        /*
+         * AML monitoring is a detective control:
+         * a flagged transaction is recorded, not blocked.
+         */
+        if (customerTransfer) {
+            amlMonitoringService.monitor(
+                    savedTransfer,
+                    from.getOwnerUserId()
+            );
+        }
     }
 }

@@ -88,4 +88,22 @@ public class ApiExceptionHandler {
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ex.getMessage());
     }
+
+    @ExceptionHandler(InvalidKycTransitionException.class)
+    public ResponseEntity<String> handleInvalidKycTransition(
+            InvalidKycTransitionException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ex.getMessage());
+    }
+
+    @ExceptionHandler(KycTransferRestrictionException.class)
+    public ResponseEntity<String> handleKycTransferRestriction(
+            KycTransferRestrictionException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ex.getMessage());
+    }
 }

@@ -31,6 +31,10 @@ public class User {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kyc_status", nullable = false)
+    private KycStatus kycStatus = KycStatus.UNVERIFIED;
+
     protected User() {}
 
     public User(String username, String passwordHash, Role role) {
@@ -98,6 +102,37 @@ public class User {
 
     public Instant getLockedUntil() {
         return lockedUntil;
+    }
+
+    public void submitKyc() {
+
+        if (kycStatus != KycStatus.UNVERIFIED) {
+            throw new InvalidKycTransitionException();
+        }
+
+        kycStatus = KycStatus.PENDING;
+    }
+
+    public void verifyKyc() {
+
+        if (kycStatus != KycStatus.PENDING) {
+            throw new InvalidKycTransitionException();
+        }
+
+        kycStatus = KycStatus.VERIFIED;
+    }
+
+    public void rejectKyc() {
+
+        if (kycStatus != KycStatus.PENDING) {
+            throw new InvalidKycTransitionException();
+        }
+
+        kycStatus = KycStatus.REJECTED;
+    }
+
+    public KycStatus getKycStatus() {
+        return kycStatus;
     }
 
     public UUID getId() {
