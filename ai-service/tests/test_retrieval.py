@@ -3,7 +3,6 @@ from unittest.mock import Mock
 import pytest
 
 from app.embeddings import FakeEmbeddingProvider
-from app.models import FAQDocument
 from app.retrieval import retrieve_faqs
 
 
