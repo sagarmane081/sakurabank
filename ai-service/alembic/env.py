@@ -29,6 +29,7 @@ config.set_main_option("sqlalchemy.url", get_database_url())
 
 target_metadata = Base.metadata
 
+
 def include_object(
     object,
     name,
@@ -72,8 +73,6 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        connection.execute(text("CREATE SCHEMA IF NOT EXISTS ai"))
-
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -83,6 +82,7 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            connection.execute(text("CREATE SCHEMA IF NOT EXISTS ai"))
             context.run_migrations()
 
 
