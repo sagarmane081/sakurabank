@@ -122,6 +122,14 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
+      - name: Enable pgvector extension
+        run: |
+          PGPASSWORD=sakura_local_dev psql \
+            -h localhost \
+            -U sakura \
+            -d sakurabank \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
       - name: Run database migrations
         run: alembic upgrade head
 
