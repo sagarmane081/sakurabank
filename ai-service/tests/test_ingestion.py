@@ -1,27 +1,15 @@
 from unittest.mock import Mock
 
 from app.embeddings import FakeEmbeddingProvider
-from app.ingestion import build_embedding_text, ingest_faqs
+from app.ingestion import ingest_faqs
 from app.models import FAQDocument
-
-
-def test_build_embedding_text():
-    result = build_embedding_text(
-        "振込の上限はいくらですか？",
-        "SakuraBankの振込上限は100万円です。",
-    )
-
-    assert result == (
-        "振込の上限はいくらですか？\n"
-        "SakuraBankの振込上限は100万円です。"
-    )
 
 
 def test_ingest_faqs_inserts_documents():
     session = Mock()
     session.scalar.return_value = None
 
-    provider = FakeEmbeddingProvider(dimensions=1536)
+    provider = FakeEmbeddingProvider(dimensions=384)
 
     processed = ingest_faqs(session, provider)
 
@@ -33,7 +21,7 @@ def test_ingest_faqs_inserts_documents():
 
     assert isinstance(first_document, FAQDocument)
     assert first_document.embedding
-    assert len(first_document.embedding) == 1536
+    assert len(first_document.embedding) == 384
 
 
 def test_ingest_faqs_updates_existing_documents():
@@ -43,12 +31,12 @@ def test_ingest_faqs_updates_existing_documents():
         faq_id="FAQ-001",
         question="古い質問",
         answer="古い回答",
-        embedding=[0.0] * 1536,
+        embedding=[0.0] * 384,
     )
 
     session.scalar.return_value = existing
 
-    provider = FakeEmbeddingProvider(dimensions=1536)
+    provider = FakeEmbeddingProvider(dimensions=384)
 
     processed = ingest_faqs(session, provider)
 
@@ -58,4 +46,4 @@ def test_ingest_faqs_updates_existing_documents():
 
     assert existing.question != "古い質問"
     assert existing.answer != "古い回答"
-    assert len(existing.embedding) == 1536
+    assert len(existing.embedding) == 384
