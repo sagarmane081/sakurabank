@@ -133,6 +133,26 @@ jobs:
       - name: Run database migrations
         run: alembic upgrade head
 
+      - name: Verify AI database schema
+        run: |
+          PGPASSWORD=sakura_local_dev psql \
+            -h localhost \
+            -U sakura \
+            -d sakurabank \
+            -c "SELECT current_database(), current_user;"
+
+          PGPASSWORD=sakura_local_dev psql \
+            -h localhost \
+            -U sakura \
+            -d sakurabank \
+            -c "SELECT to_regclass('ai.faq_documents');"
+
+          PGPASSWORD=sakura_local_dev psql \
+            -h localhost \
+            -U sakura \
+            -d sakurabank \
+            -c "SELECT version_num FROM ai.alembic_version;"
+
       - name: Ingest FAQ embeddings
         run: python -m app.ingest
 
