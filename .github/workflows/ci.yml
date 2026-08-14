@@ -122,6 +122,14 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
+      - name: Create AI schema
+        run: >
+          python -c
+          "from app.database import engine;
+          from sqlalchemy import text;
+          with engine.begin() as connection:
+              connection.execute(text('CREATE SCHEMA IF NOT EXISTS ai'))"
+
       - name: Run database migrations
         run: alembic upgrade head
 
