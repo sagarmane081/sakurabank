@@ -112,7 +112,7 @@ class RefreshTokenServiceTest {
                 familyId
         );
 
-        when(refreshTokenRepository.findByTokenHash(
+        when(refreshTokenRepository.findByTokenHashForUpdate(
                 sha256(rawToken)
         )).thenReturn(Optional.of(original));
 
@@ -140,7 +140,7 @@ class RefreshTokenServiceTest {
     @Test
     void rotateRejectsUnknownToken() {
 
-        when(refreshTokenRepository.findByTokenHash(
+        when(refreshTokenRepository.findByTokenHashForUpdate(
                 sha256("unknown-token")
         )).thenReturn(Optional.empty());
 
@@ -161,7 +161,7 @@ class RefreshTokenServiceTest {
                 NOW.minusSeconds(1)
         );
 
-        when(refreshTokenRepository.findByTokenHash(
+        when(refreshTokenRepository.findByTokenHashForUpdate(
                 sha256(rawToken)
         )).thenReturn(Optional.of(expired));
 
@@ -183,7 +183,7 @@ class RefreshTokenServiceTest {
 
         revoked.revoke(NOW.minusSeconds(10));
 
-        when(refreshTokenRepository.findByTokenHash(
+        when(refreshTokenRepository.findByTokenHashForUpdate(
                 sha256(rawToken)
         )).thenReturn(Optional.of(revoked));
 
@@ -213,7 +213,7 @@ class RefreshTokenServiceTest {
                         familyId
                 );
 
-        when(refreshTokenRepository.findByTokenHash(
+        when(refreshTokenRepository.findByTokenHashForUpdate(
                 sha256(rawToken)
         )).thenReturn(Optional.of(reusedToken));
 
@@ -363,7 +363,7 @@ class RefreshTokenServiceTest {
     @Test
     void logoutIsIdempotentForUnknownToken() {
 
-        when(refreshTokenRepository.findByTokenHash(
+        when(refreshTokenRepository.findByTokenHashForUpdate(
                 sha256("unknown-token")
         )).thenReturn(Optional.empty());
 

@@ -276,14 +276,15 @@ class TransferServiceTest {
 
     @Test
     void replayRequestReturnsWithoutChangingAnything() {
-
         UUID key = UUID.randomUUID();
+        UUID fromId = UUID.randomUUID();
+        UUID toId = UUID.randomUUID();
 
         Transfer existingTransfer =
                 new Transfer(
                         key,
-                        UUID.randomUUID(),
-                        UUID.randomUUID(),
+                        fromId,
+                        toId,
                         new BigDecimal("100.00")
                 );
 
@@ -293,11 +294,52 @@ class TransferServiceTest {
 
         transferService.transfer(
                 key,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
+                fromId,
+                toId,
                 new BigDecimal("100.00"),
                 CALLER_USER_ID
         );
+
+        verifyNoInteractions(accountRepository);
+        verifyNoInteractions(ledgerEntryRepository);
+
+        verify(
+                transferRepository,
+                never()
+        ).save(any());
+    }
+
+    @Test
+    void rejectsReplayWithDifferentPayload() {
+        UUID key = UUID.randomUUID();
+        UUID fromId = UUID.randomUUID();
+        UUID toId = UUID.randomUUID();
+
+        Transfer existingTransfer =
+                new Transfer(
+                        key,
+                        fromId,
+                        toId,
+                        new BigDecimal("100.00")
+                );
+
+        when(
+                transferRepository.findByIdempotencyKey(key)
+        ).thenReturn(Optional.of(existingTransfer));
+
+        assertThatThrownBy(() ->
+                transferService.transfer(
+                        key,
+                        fromId,
+                        toId,
+                        new BigDecimal("200.00"),
+                        CALLER_USER_ID
+                ))
+                .isInstanceOf(InvalidTransferException.class)
+                .hasMessage(
+                        "Cannot transfer funds to the same account: "
+                                + fromId
+                );
 
         verifyNoInteractions(accountRepository);
         verifyNoInteractions(ledgerEntryRepository);

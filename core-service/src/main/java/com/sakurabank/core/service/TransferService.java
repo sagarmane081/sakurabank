@@ -109,6 +109,14 @@ public class TransferService {
                 transferRepository.findByIdempotencyKey(idempotencyKey);
 
         if (existing.isPresent()) {
+            Transfer existingTransfer = existing.get();
+
+            if (!existingTransfer.getFromAccountId().equals(fromAccountId)
+                    || !existingTransfer.getToAccountId().equals(toAccountId)
+                    || existingTransfer.getAmount().compareTo(amount) != 0) {
+                throw new InvalidTransferException(fromAccountId);
+            }
+
             return;
         }
 

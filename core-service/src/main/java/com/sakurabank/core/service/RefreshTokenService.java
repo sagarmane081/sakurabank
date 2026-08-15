@@ -74,7 +74,7 @@ public class RefreshTokenService {
 
         RefreshToken current =
                 refreshTokenRepository
-                        .findByTokenHash(hash(rawRefreshToken))
+                        .findByTokenHashForUpdate(hash(rawRefreshToken))
                         .orElseThrow(
                                 InvalidRefreshTokenException::new
                         );
