@@ -30,11 +30,21 @@ def idempotent_write(df, layer: str, table: str, business_date: str):
     Uses Delta's `replaceWhere` to overwrite only the target partition, so rerunning
     the same business_date (e.g. after a mid-run failure) replaces that day's data
     instead of appending duplicates alongside it.
+
+    `mergeSchema` lets a new column flow through (older partitions read it as NULL) while
+    Delta still rejects incompatible type changes. Without it, a column the source
+    contract treats as additive and allowed crashed the very next Bronze write -- found by
+    test_contract.py::test_additive_column_flows_into_existing_table.
     """
     from delta.tables import DeltaTable
 
     path = delta_path(layer, table)
-    writer = df.write.format("delta").mode("overwrite").partitionBy("business_date")
+    writer = (
+        df.write.format("delta")
+        .mode("overwrite")
+        .option("mergeSchema", "true")
+        .partitionBy("business_date")
+    )
     if DeltaTable.isDeltaTable(df.sparkSession, path):
         writer = writer.option("replaceWhere", f"business_date = '{business_date}'")
     writer.save(path)

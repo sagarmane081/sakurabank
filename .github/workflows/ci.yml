@@ -260,10 +260,11 @@ jobs:
       - name: Seed a balanced transfer (Alice -> Bob) so the ledger has data to reconcile
         run: python data-platform/scripts/seed_demo_data.py
 
-      - name: Run Bronze -> Silver -> Great Expectations gate -> Gold -> reconcile -> DQ checks
+      - name: Run source contract -> Bronze -> Silver -> Great Expectations gate -> Gold -> reconcile -> DQ checks
         working-directory: data-platform
         run: |
           BUSINESS_DATE=$(date -u +%F)
+          python -m checks.source_contract --business-date "$BUSINESS_DATE" --dag-run-id "ci-${{ github.run_id }}"
           for table in accounts ledger_entries transfers; do
             python -m spark_jobs.bronze_ingest --table "$table" --business-date "$BUSINESS_DATE" --dag-run-id "ci-${{ github.run_id }}"
           done

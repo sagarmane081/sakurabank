@@ -18,7 +18,7 @@ from airflow.models import Variable
 from airflow.operators.python import PythonOperator, ShortCircuitOperator
 from airflow.utils.task_group import TaskGroup
 
-from checks import run_sql_checks
+from checks import run_sql_checks, source_contract
 from spark_jobs import bronze_ingest, gold_aggregate, reconcile, silver_transform
 
 DEFAULT_ARGS = {
@@ -45,6 +45,14 @@ def check_business_day(**context) -> bool:
     business-day calendar (holidays, half-days, etc.)."""
     business_date = _business_date(**context)
     return date.fromisoformat(business_date).weekday() < 5
+
+
+def _run_source_contract(**context):
+    source_contract.run(
+        business_date=_business_date(**context),
+        dag_run_id=_dag_run_id(**context),
+        simulate_failure=_simulate_failure(),
+    )
 
 
 def _run_bronze(table: str):
@@ -125,6 +133,7 @@ with DAG(
             for table in bronze_ingest.SOURCE_TABLES
         ]
 
+    contract_task = PythonOperator(task_id="source_contract_check", python_callable=_run_source_contract)
     silver_task = PythonOperator(task_id="silver_transform", python_callable=_run_silver)
     gx_gate_task = PythonOperator(task_id="gx_validate_silver", python_callable=_run_gx_gate)
     gold_task = PythonOperator(task_id="gold_aggregate", python_callable=_run_gold)
@@ -133,6 +142,7 @@ with DAG(
 
     (
         business_day_gate
+        >> contract_task
         >> bronze_group
         >> silver_task
         >> gx_gate_task

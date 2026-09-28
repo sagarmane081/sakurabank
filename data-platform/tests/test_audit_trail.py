@@ -5,6 +5,7 @@ run must share exactly one business_date -- the correlation key that lets you an
 """
 
 EXPECTED_SLOTS = {
+    ("contract", "source"),
     ("bronze", "accounts"),
     ("bronze", "ledger_entries"),
     ("bronze", "transfers"),

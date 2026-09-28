@@ -163,6 +163,27 @@ such a row, catches it (`gx:expect_column_values_to_not_be_null:id`) — so in t
 pipeline it would have stopped the row before Gold, but that's the second line of
 defense doing the first line's job.
 
+### 8. Source contract and schema change
+
+`checks/source_contract.py` runs first on every pipeline run (task
+`source_contract_check`, before any extraction) and compares core-service's live schema
+against `checks/contracts/source_contract.json`, one result per contracted column.
+Breaking changes stop the run before data moves: a contracted table or column missing,
+a type change, or a NOT NULL column becoming nullable. A column not in the contract is
+additive: allowed, and recorded as a warning.
+
+`test_contract.py` mutates a throwaway copy of the `core` schema (never `core` itself)
+to prove each breaking change is caught and each non-breaking one isn't, then tests
+Delta's side on scratch tables: an additive column must flow through, an incompatible
+type change must fail loudly, and a rerun's overwrite must leave the prior version
+readable via time travel.
+
+**What this found:** the contract said a new source column was additive and allowed,
+but the next Bronze write would have failed on a Delta schema mismatch -- any column
+core-service added would have stopped the pipeline one step after the gate passed it.
+Fixed by enabling `mergeSchema` on writes, which still rejects incompatible type
+changes (the type-change test guards against loosening too far).
+
 ## Coverage matrix
 
 | JD responsibility | Covered by |
@@ -173,6 +194,7 @@ defense doing the first line's job.
 | Retry / rerun / recovery / backfill | §4, `test_recovery.py` |
 | Audit / control / lineage | §5, `test_audit_trail.py` |
 | DQ checks in SQL + Python, CI-repeatable | §6, §7 (`test_bad_data.py`), the `data-platform` job in `.github/workflows/ci.yml` |
+| Code/schema version compatibility (source side) | §8, `test_contract.py` |
 | Governance / PII / least-privilege (simulated) | `governance/masked_views.sql`, `docs/governance-mapping.md` |
 | Monitoring/alerting, DEV/TEST/PROD, downstream delivery | **Not built** — see README roadmap |
 

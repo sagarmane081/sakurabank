@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "The schema this pipeline depends on from core-service's source tables (schema `core`).",
+    "Validated by checks/source_contract.py before any extraction, on every run.",
+    "Breaking (stops the run): a table or contracted column goes missing, a column's type",
+    "changes, or a NOT NULL column becomes nullable. Additive (allowed, recorded as a",
+    "warning): a column that isn't in this contract appears.",
+    "Generated from the live information_schema, not written from memory. Note that",
+    "transfers.created_at is `timestamp without time zone` while every other timestamp is",
+    "`with time zone` -- a real inconsistency in the source schema, recorded as-is."
+  ],
+  "schema": "core",
+  "tables": {
+    "accounts": {
+      "id": {"type": "uuid", "nullable": false},
+      "account_number": {"type": "character varying", "nullable": false},
+      "owner_name": {"type": "character varying", "nullable": false},
+      "status": {"type": "character varying", "nullable": false},
+      "currency": {"type": "character", "nullable": false},
+      "balance": {"type": "numeric", "nullable": false},
+      "created_at": {"type": "timestamp with time zone", "nullable": false},
+      "updated_at": {"type": "timestamp with time zone", "nullable": false},
+      "account_type": {"type": "character varying", "nullable": false},
+      "owner_user_id": {"type": "uuid", "nullable": true}
+    },
+    "ledger_entries": {
+      "id": {"type": "uuid", "nullable": false},
+      "transaction_id": {"type": "uuid", "nullable": false},
+      "account_id": {"type": "uuid", "nullable": false},
+      "entry_type": {"type": "character varying", "nullable": false},
+      "amount": {"type": "numeric", "nullable": false},
+      "created_at": {"type": "timestamp with time zone", "nullable": false}
+    },
+    "transfers": {
+      "id": {"type": "uuid", "nullable": false},
+      "idempotency_key": {"type": "uuid", "nullable": false},
+      "from_account_id": {"type": "uuid", "nullable": false},
+      "to_account_id": {"type": "uuid", "nullable": false},
+      "amount": {"type": "numeric", "nullable": false},
+      "created_at": {"type": "timestamp without time zone", "nullable": false}
+    }
+  }
+}

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS audit.batch_control (
     dag_run_id       VARCHAR(255) NOT NULL,
     task_id          VARCHAR(255) NOT NULL,
     attempt          INTEGER NOT NULL DEFAULT 1,
-    layer            VARCHAR(16) NOT NULL CHECK (layer IN ('bronze', 'silver', 'dq_gx', 'gold', 'reconcile', 'dq_checks')),
+    layer            VARCHAR(16) NOT NULL CHECK (layer IN ('contract', 'bronze', 'silver', 'dq_gx', 'gold', 'reconcile', 'dq_checks')),
     source_table     VARCHAR(64) NOT NULL,
     business_date    DATE NOT NULL,
     status           VARCHAR(16) NOT NULL CHECK (status IN ('RUNNING', 'SUCCESS', 'FAILED', 'RECOVERED')),
