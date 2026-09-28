@@ -25,6 +25,13 @@ node_modules/
 dist/
 .vite/
 
+# --- data-platform (Delta lake output, Spark scratch) ---
+data-platform/data-lake/*
+!data-platform/data-lake/.gitkeep
+metastore_db/
+spark-warehouse/
+derby.log
+
 # --- IDE / OS ---
 .idea/
 .vscode/

@@ -39,6 +39,10 @@ services:
       DB_USER: ${POSTGRES_USER:-sakura}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-sakura_local_dev}
       REDIS_HOST: redis
+      # No default in application.yml on purpose (secrets shouldn't have one) -- this
+      # dev-only fallback exists so `docker compose up` works out of the box locally;
+      # override with a real value via .env for anything beyond throwaway local use.
+      JWT_SECRET: ${JWT_SECRET:-sakurabank-local-dev-jwt-secret-do-not-use-in-prod}
     ports:
       - "8080:8080"
     depends_on:
@@ -77,5 +81,119 @@ services:
       timeout: 5s
       retries: 12
 
+  pipeline-account-init:
+    image: pgvector/pgvector:pg16
+    container_name: sakurabank-pipeline-account-init
+    depends_on:
+      core-service:
+        # Must wait for core-service itself, not just postgres -- core.users is created
+        # by core-service's own Flyway migrations on first boot, not by postgres's
+        # container-init scripts (which run before core-service ever starts).
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-sakurabank}
+      PGUSER: ${POSTGRES_USER:-sakura}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-sakura_local_dev}
+    volumes:
+      - ./infra/db/seed:/seed:ro
+    entrypoint: /bin/sh
+    command: ["-c", "psql -v ON_ERROR_STOP=1 -f /seed/pipeline-service-account.sql"]
+
+  airflow-init:
+    build: ./data-platform/airflow
+    # Explicit shared tag: airflow-init/webserver/scheduler all build from this same
+    # Dockerfile, but Compose gives each service its own image by default -- without
+    # this, "docker compose build airflow-init" silently leaves the other two on a
+    # stale image (bit us once: pytest/deltalake/pandas were added but only airflow-init
+    # picked them up until all three were rebuilt explicitly).
+    image: sakurabank-airflow
+    container_name: sakurabank-airflow-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-sakura}:${POSTGRES_PASSWORD:-sakura_local_dev}@postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-y6Q4tjxbEO8gCvEMKRjzlO0TiVN3P5TQAYb-8jC0FsA=}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      # Default REST API auth backend is session/cookie-based; test_recovery.py drives
+      # the API with HTTP basic auth (admin/admin, the local-dev user airflow-init
+      # creates), so basic_auth must be enabled explicitly.
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      PYTHONPATH: /opt/airflow
+      CORE_SERVICE_DB_HOST: postgres
+      CORE_SERVICE_DB_PORT: "5432"
+      CORE_SERVICE_DB_NAME: ${POSTGRES_DB:-sakurabank}
+      CORE_SERVICE_DB_USER: ${POSTGRES_USER:-sakura}
+      CORE_SERVICE_DB_PASSWORD: ${POSTGRES_PASSWORD:-sakura_local_dev}
+      CORE_SERVICE_URL: http://core-service:8080
+      DATA_LAKE_PATH: /opt/airflow/data-lake
+      # For pytest, run in-container against Docker-network hostnames (see
+      # data-platform/tests/conftest.py) rather than its host-run localhost defaults.
+      TEST_DB_HOST: postgres
+      TEST_DB_PORT: "5432"
+      TEST_DB_NAME: ${POSTGRES_DB:-sakurabank}
+      TEST_DB_USER: ${POSTGRES_USER:-sakura}
+      TEST_DB_PASSWORD: ${POSTGRES_PASSWORD:-sakura_local_dev}
+      TEST_CORE_SERVICE_URL: http://core-service:8080
+      TEST_AIRFLOW_URL: http://airflow-webserver:8080/api/v1
+      TEST_AIRFLOW_USER: admin
+      TEST_AIRFLOW_PASSWORD: admin
+      TEST_DATA_LAKE_PATH: /opt/airflow/data-lake
+    volumes: &airflow-volumes
+      - ./data-platform/dags:/opt/airflow/dags
+      - ./data-platform/spark_jobs:/opt/airflow/spark_jobs
+      - ./data-platform/checks:/opt/airflow/checks
+      - ./data-platform/tests:/opt/airflow/tests
+      - ./data-platform/pytest.ini:/opt/airflow/pytest.ini
+      - ./data-platform/data-lake:/opt/airflow/data-lake
+      - ivy-cache:/home/airflow/.ivy2
+      - airflow-logs:/opt/airflow/logs
+    entrypoint: /bin/bash
+    command: >
+      -c "airflow db migrate &&
+          airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true"
+
+  airflow-webserver:
+    build: ./data-platform/airflow
+    image: sakurabank-airflow
+    container_name: sakurabank-airflow-webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    ports:
+      - "8081:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+
+  airflow-scheduler:
+    build: ./data-platform/airflow
+    image: sakurabank-airflow
+    container_name: sakurabank-airflow-scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      pipeline-account-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    command: scheduler
+
 volumes:
   pgdata:
+  ivy-cache:
+  airflow-logs:

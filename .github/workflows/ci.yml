@@ -14,6 +14,7 @@ jobs:
     outputs:
       core: ${{ steps.filter.outputs.core }}
       ai: ${{ steps.filter.outputs.ai }}
+      data_platform: ${{ steps.filter.outputs.data_platform }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +27,10 @@ jobs:
               - '.github/workflows/**'
             ai:
               - 'ai-service/**'
+              - '.github/workflows/**'
+            data_platform:
+              - 'data-platform/**'
+              - 'infra/db/init/**'
               - '.github/workflows/**'
 
   gitleaks:
@@ -162,5 +167,112 @@ jobs:
       # pytest addopts in pyproject.toml enforce --cov-fail-under=80
       - name: Tests + coverage gate
         run: pytest
+
+  data-platform:
+    needs: changes
+    if: needs.changes.outputs.data_platform == 'true'
+    runs-on: ubuntu-latest
+
+    # Exercises the Spark/Delta pipeline logic and the pytest QA suite directly against
+    # a real, running core-service -- deliberately WITHOUT Airflow: standing up the
+    # webserver/scheduler/DB-migrate sequence in CI adds a lot of flakiness for a
+    # portfolio CI gate, and spark_jobs/*.py are plain CLI-runnable modules precisely so
+    # they can be exercised this way, independent of the orchestrator. Airflow's
+    # orchestration/locking/recovery behavior is verified locally (docker compose) via
+    # the `integration`-marked tests in data-platform/tests, not here.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: sakura
+          POSTGRES_PASSWORD: sakura_local_dev
+          POSTGRES_DB: sakurabank
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sakura"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      CORE_SERVICE_DB_HOST: localhost
+      CORE_SERVICE_DB_PORT: "5432"
+      CORE_SERVICE_DB_NAME: sakurabank
+      CORE_SERVICE_DB_USER: sakura
+      CORE_SERVICE_DB_PASSWORD: sakura_local_dev
+      CORE_SERVICE_URL: http://localhost:8080
+      DATA_LAKE_PATH: ${{ github.workspace }}/data-platform/data-lake
+      PYTHONPATH: ${{ github.workspace }}/data-platform
+      TEST_DB_HOST: localhost
+      TEST_CORE_SERVICE_URL: http://localhost:8080
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21" # also satisfies PySpark's JVM requirement
+          cache: maven
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Apply audit schema
+        run: |
+          PGPASSWORD=sakura_local_dev psql -h localhost -U sakura -d sakurabank \
+            -f infra/db/init/02-audit-schema.sql
+
+      - name: Boot core-service (real Flyway migrations + REST API)
+        working-directory: core-service
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DB_HOST: localhost
+        run: |
+          nohup mvn -B spring-boot:run > core-service.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/actuator/health | grep -q UP && exit 0
+            sleep 5
+          done
+          echo "core-service did not become healthy in time" && cat core-service.log && exit 1
+
+      # Must run AFTER core-service is healthy, not alongside the audit-schema step above:
+      # core.users is created by core-service's own Flyway migrations on first boot, not
+      # by a Postgres init script (see infra/db/seed/pipeline-service-account.sql's own
+      # comment -- this bit us once already in local docker-compose).
+      - name: Seed the pipeline's service account
+        run: |
+          PGPASSWORD=sakura_local_dev psql -h localhost -U sakura -d sakurabank \
+            -f infra/db/seed/pipeline-service-account.sql
+
+      - name: Install data-platform Python dependencies
+        run: |
+          pip install pyspark==3.5.1 delta-spark==3.2.0 psycopg2-binary==2.9.9 requests==2.32.3
+          pip install -r data-platform/tests/requirements-test.txt
+
+      # core-service's SecurityConfig requires an authenticated ADMIN/COMPLIANCE_OFFICER
+      # user for /api/accounts, /api/transfers, and DepositRequest requires an
+      # idempotencyKey -- both discovered the hard way testing this locally; the
+      # unauthenticated curl-based version of this step 403's immediately.
+      - name: Seed a balanced transfer (Alice -> Bob) so the ledger has data to reconcile
+        run: python data-platform/scripts/seed_demo_data.py
+
+      - name: Run Bronze -> Silver -> Gold -> reconcile -> DQ checks
+        working-directory: data-platform
+        run: |
+          BUSINESS_DATE=$(date -u +%F)
+          for table in accounts ledger_entries transfers; do
+            python -m spark_jobs.bronze_ingest --table "$table" --business-date "$BUSINESS_DATE" --dag-run-id "ci-${{ github.run_id }}"
+          done
+          python -m spark_jobs.silver_transform --business-date "$BUSINESS_DATE" --dag-run-id "ci-${{ github.run_id }}"
+          python -m spark_jobs.gold_aggregate --business-date "$BUSINESS_DATE" --dag-run-id "ci-${{ github.run_id }}"
+          python -m spark_jobs.reconcile --business-date "$BUSINESS_DATE" --dag-run-id "ci-${{ github.run_id }}"
+          python -m checks.run_sql_checks --business-date "$BUSINESS_DATE" --dag-run-id "ci-${{ github.run_id }}"
+
+      - name: Run QA test suite (reconciliation, DQ, audit trail)
+        run: pytest data-platform/tests -v
 
 # Phase 4 adds: docker build + Trivy image scan + push + deploy stages.
