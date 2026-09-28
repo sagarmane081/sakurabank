@@ -67,6 +67,19 @@ def _run_silver(**context):
     )
 
 
+def _run_gx_gate(**context):
+    # Imported here, not at module top: the scheduler re-parses this file continuously,
+    # and importing great_expectations at parse time measured 7.3s vs 2.4s per parse plus
+    # a burst of INFO log noise every time. Only pay that when the gate actually runs.
+    from checks import gx_validation
+
+    gx_validation.run(
+        business_date=_business_date(**context),
+        dag_run_id=_dag_run_id(**context),
+        simulate_failure=_simulate_failure(),
+    )
+
+
 def _run_gold(**context):
     gold_aggregate.run(
         business_date=_business_date(**context),
@@ -113,8 +126,17 @@ with DAG(
         ]
 
     silver_task = PythonOperator(task_id="silver_transform", python_callable=_run_silver)
+    gx_gate_task = PythonOperator(task_id="gx_validate_silver", python_callable=_run_gx_gate)
     gold_task = PythonOperator(task_id="gold_aggregate", python_callable=_run_gold)
     reconcile_task = PythonOperator(task_id="reconcile", python_callable=_run_reconcile)
     dq_task = PythonOperator(task_id="dq_checks", python_callable=_run_dq_checks)
 
-    business_day_gate >> bronze_group >> silver_task >> gold_task >> reconcile_task >> dq_task
+    (
+        business_day_gate
+        >> bronze_group
+        >> silver_task
+        >> gx_gate_task
+        >> gold_task
+        >> reconcile_task
+        >> dq_task
+    )

@@ -105,9 +105,17 @@ around every job's body — worth an explicit test if this pipeline goes further
 
 ### 6. Data-quality checks as code (SQL + Python)
 
-Two check engines, deliberately kept separate:
+Three check engines, deliberately kept separate:
 - `checks/expectations.py` — Python/PySpark DataFrame rules, applied inline during
   Silver transformation (can quarantine, not just report).
+- `checks/gx_validation.py` — **Great Expectations** (1.x, Spark datasource), run as its
+  own task (`gx_validate_silver`) between Silver and Gold. A hard post-condition on
+  Silver's *output*: if anything the inline rules should have quarantined slipped
+  through, the task fails and Gold is never built from it. Overlaps with
+  `expectations.py` on the rules on purpose — both results land in `audit.dq_results`
+  for the same batch (GE's prefixed `gx:`), so the two engines can be compared side by
+  side. `test_data_quality.py::test_great_expectations_gate_actually_ran` guards against
+  the gate silently not running.
 - `checks/sql/*.sql` + `checks/run_sql_checks.py` — standalone "expect zero rows"
   queries, some against the Postgres source directly (`orphan_ledger_entries.sql`,
   `duplicate_transfer_idempotency_key.sql`, `unbalanced_ledger_transactions.sql`), some
@@ -115,9 +123,14 @@ Two check engines, deliberately kept separate:
   `bronze_silver_row_count_parity.sql`).
 
 This split mirrors the real distinction between Delta Live Tables expectations
-(inline, can gate a write) and a separate SQL-based reconciliation/audit job (runs
-after the fact, across layers) — both are "automated data validation checks," but they
-catch different failure modes.
+(inline, can gate a write), a contract-style validation gate between layers, and a
+separate SQL-based reconciliation/audit job (runs after the fact, across layers) — all
+are "automated data validation checks," but they catch different failure modes.
+
+Two integration details worth knowing: GE 1.x sends usage analytics by default, so
+`gx_validation.py` sets `GX_ANALYTICS_ENABLED=false` before importing it; and the DAG
+imports GE lazily inside the task, since importing it at parse time took DAG parsing
+from 2.4s to 7.3s on every scheduler loop.
 
 ## Coverage matrix
 

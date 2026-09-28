@@ -43,6 +43,26 @@ def test_referential_integrity_was_actually_checked(pg_conn, latest_dag_run_id):
     )
 
 
+def test_great_expectations_gate_actually_ran(pg_conn, latest_dag_run_id):
+    """Same principle as the referential-integrity check above: the GE gate between
+    Silver and Gold passing means nothing if it never ran. Expects results for both
+    Silver tables it covers, recorded under the `gx:` rule-name prefix.
+    """
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT dq.table_name, count(*) FROM audit.dq_results dq
+              JOIN audit.batch_control bc ON bc.batch_id = dq.batch_id
+             WHERE bc.dag_run_id = %s AND dq.rule_name LIKE 'gx:%%'
+             GROUP BY dq.table_name
+            """,
+            (latest_dag_run_id,),
+        )
+        counts = dict(cur.fetchall())
+    assert counts.get("accounts", 0) > 0, "no Great Expectations results recorded for silver accounts"
+    assert counts.get("ledger_entries", 0) > 0, "no Great Expectations results recorded for silver ledger_entries"
+
+
 def test_no_orphan_rows_in_silver_quarantine_unexplained(read_delta_table, latest_business_date):
     """Every quarantined row must carry a reason a human can act on -- the point of
     quarantining instead of dropping is that someone can look at *why*.

@@ -11,6 +11,7 @@ EXPECTED_SLOTS = {
     ("silver", "accounts"),
     ("silver", "ledger_entries"),
     ("silver", "transfers"),
+    ("dq_gx", "silver"),
     ("gold", "gold_aggregate"),
     ("reconcile", "ledger_entries"),
     ("dq_checks", "sql_checks"),

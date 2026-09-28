@@ -82,29 +82,44 @@ def read_delta_table():
 
 
 @pytest.fixture(scope="session")
-def latest_business_date(pg_conn):
+def latest_clean_run(pg_conn):
+    """The most recently EXECUTED pipeline run that completed with every batch SUCCESS.
+
+    Not "highest business_date": backfills and recovery drills target past dates, so
+    the highest date is often a run from before the latest code change (this bit us
+    when adding the Great Expectations gate -- the suite kept validating a pre-GE run).
+    And not simply "most recent run" either: recovery drills deliberately leave FAILED
+    attempts in their audit history, which is correct for them but isn't what a
+    regression suite should be asserting against.
+
+    Returns (dag_run_id, business_date) from ONE query, so the two can never come from
+    different runs (the previous separate fixtures could mismatch them).
+    """
     with pg_conn.cursor() as cur:
         cur.execute(
-            "SELECT business_date FROM audit.batch_control "
-            "WHERE layer = 'reconcile' AND status = 'SUCCESS' "
-            "ORDER BY business_date DESC LIMIT 1"
+            """
+            SELECT dag_run_id, business_date
+              FROM audit.batch_control
+             GROUP BY dag_run_id, business_date
+            HAVING bool_and(status = 'SUCCESS') AND bool_or(layer = 'reconcile')
+             ORDER BY max(started_at) DESC
+             LIMIT 1
+            """
         )
         row = cur.fetchone()
     if row is None:
-        pytest.skip("no successful reconcile batch found -- run the sakurabank_medallion DAG at least once")
-    return row[0].isoformat()
+        pytest.skip("no fully clean pipeline run found -- run the sakurabank_medallion DAG at least once")
+    return row[0], row[1].isoformat()
 
 
 @pytest.fixture(scope="session")
-def latest_dag_run_id(pg_conn, latest_business_date):
-    with pg_conn.cursor() as cur:
-        cur.execute(
-            "SELECT dag_run_id FROM audit.batch_control WHERE business_date = %s "
-            "ORDER BY started_at DESC LIMIT 1",
-            (latest_business_date,),
-        )
-        row = cur.fetchone()
-    return row[0]
+def latest_business_date(latest_clean_run):
+    return latest_clean_run[1]
+
+
+@pytest.fixture(scope="session")
+def latest_dag_run_id(latest_clean_run):
+    return latest_clean_run[0]
 
 
 @pytest.fixture(scope="session", autouse=True)
