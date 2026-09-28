@@ -99,6 +99,14 @@ def run_expectations(conn, df: DataFrame, expectations: List[Expectation], batch
     if failing_ids is None:
         return df, df.sparkSession.createDataFrame([], df.schema)
 
-    quarantined = df.join(failing_ids, on="_row_id", how="inner")
-    clean = df.join(failing_ids, on="_row_id", how="left_anti")
+    # Null-safe (<=>), not a plain equi-join: _row_id is the table's primary key, and a
+    # row whose key is NULL can't match itself under `=`. Found by a negative test -- a
+    # null-id account was recorded as failing not_null:id in audit.dq_results, then
+    # promoted to Silver anyway, because the plain inner join never matched it into
+    # quarantine and the left_anti join kept it as "clean". Aliased so Spark doesn't
+    # treat the condition as an ambiguous self-join on df's own column.
+    failing_ids = failing_ids.select(F.col("_row_id").alias("_failing_row_id")).distinct()
+    match = df["_row_id"].eqNullSafe(failing_ids["_failing_row_id"])
+    quarantined = df.join(failing_ids, match, "inner").drop("_failing_row_id")
+    clean = df.join(failing_ids, match, "left_anti")
     return clean, quarantined

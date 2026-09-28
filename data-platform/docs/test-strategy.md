@@ -132,6 +132,37 @@ Two integration details worth knowing: GE 1.x sends usage analytics by default, 
 imports GE lazily inside the task, since importing it at parse time took DAG parsing
 from 2.4s to 7.3s on every scheduler loop.
 
+### 7. Negative tests: proving each check catches what it's named for
+
+Every other test here runs against clean data, where a check that does nothing also
+passes. `test_bad_data.py` feeds each check data that *should* fail:
+
+- **Silver quarantine** — a real Bronze partition is cloned to a test date, crafted bad
+  rows are added (negative customer balance, invalid status, duplicate account number,
+  null id, orphan/zero/invalid-type ledger entries, orphan/zero transfers), and the real
+  `silver_transform` runs on it. Asserts each bad row lands in quarantine and not Silver,
+  that no legitimate row is collateral damage, that every Bronze row is accounted for,
+  that each failed rule is recorded in `audit.dq_results`, and — as a regression guard —
+  that the SYSTEM account's legitimate negative balance is *not* quarantined.
+- **Great Expectations gate** — bad rows written straight into Silver (as if the
+  quarantine were broken); asserts each GE rule fails, the batch is FAILED, and no Gold
+  batch exists.
+- **SQL checks (Spark engine)** — a duplicated and a silently dropped Silver row.
+- **SQL checks (Postgres engine)** — each check's real SQL run against TEMP tables shaped
+  like `core.*` minus its constraints, never against the real, append-only source.
+
+Cloning a real Bronze partition rather than hand-building rows means these tests also
+break if the real schema drifts.
+
+**What this found on its first run:** a row with a NULL primary key was *recorded* as
+failing `not_null:id` in `audit.dq_results` and then *promoted to Silver anyway*. The
+quarantine split joined on the primary key, and `NULL = NULL` is never true, so the row
+matched neither side of the split correctly. Fixed with a null-safe join in
+`expectations.run_expectations`. The Great Expectations gate, run on Silver containing
+such a row, catches it (`gx:expect_column_values_to_not_be_null:id`) — so in the real
+pipeline it would have stopped the row before Gold, but that's the second line of
+defense doing the first line's job.
+
 ## Coverage matrix
 
 | JD responsibility | Covered by |
@@ -141,7 +172,7 @@ from 2.4s to 7.3s on every scheduler loop.
 | Job orchestration / scheduling / locking | §3, DAG structure, `audit.batch_control` unique index |
 | Retry / rerun / recovery / backfill | §4, `test_recovery.py` |
 | Audit / control / lineage | §5, `test_audit_trail.py` |
-| DQ checks in SQL + Python, CI-repeatable | §6, `.github/workflows/data-platform-ci.yml` |
+| DQ checks in SQL + Python, CI-repeatable | §6, §7 (`test_bad_data.py`), the `data-platform` job in `.github/workflows/ci.yml` |
 | Governance / PII / least-privilege (simulated) | `governance/masked_views.sql`, `docs/governance-mapping.md` |
 | Monitoring/alerting, DEV/TEST/PROD, downstream delivery | **Not built** — see README roadmap |
 

@@ -123,6 +123,25 @@ def latest_dag_run_id(latest_clean_run):
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _import_great_expectations_before_any_spark_session():
+    """PySpark adds its spark.jars.packages jars to sys.path, and when a session stops it
+    deletes them from disk but leaves the sys.path entries behind. Importing Great
+    Expectations after that fails: it pulls in sqlalchemy_redshift, which scans every
+    sys.path entry and hits the deleted jar. Only a process that starts and stops Spark
+    more than once hits this -- never a real Airflow task (one Spark lifetime per task
+    process) -- but the negative tests do exactly that. Importing it here, once, before
+    any test starts Spark, makes the scan happen against a clean sys.path.
+
+    Via checks.gx_validation rather than great_expectations directly, so its analytics
+    opt-out is applied before the import.
+    """
+    try:
+        import checks.gx_validation  # noqa: F401
+    except ImportError:
+        pass  # no PySpark/GE on this host; the tests that need them won't run here anyway
+
+
+@pytest.fixture(scope="session", autouse=True)
 def ensure_dag_unpaused():
     """New Airflow DAGs are paused by default -- tests that trigger runs need it live."""
     try:
