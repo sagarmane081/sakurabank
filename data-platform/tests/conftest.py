@@ -122,6 +122,43 @@ def latest_dag_run_id(latest_clean_run):
     return latest_clean_run[0]
 
 
+@pytest.fixture(scope="session")
+def dates_are_unused(pg_conn, airflow_api):
+    """Returns a function: (first_logical_date, last_logical_date, business_dates) -> True
+    only if Airflow has no DAG run in that logical-date range AND audit.batch_control has
+    no rows for any of the business dates.
+
+    Both checks are needed. Airflow allows one run per logical date, so a test that
+    triggers a date some earlier run already used gets a 409 -- a random pick "from past
+    dates" started colliding about 1 run in 5 once enough drills and backfills had run.
+    And a run can exist with no audit rows at all (a weekend skipped by
+    check_business_day), so the audit table alone can't answer it.
+    """
+    base_url, auth = airflow_api
+
+    def check(first, last, business_dates):
+        resp = requests.get(
+            f"{base_url}/dags/{DAG_ID}/dagRuns",
+            params={
+                "execution_date_gte": f"{first.isoformat()}T00:00:00+00:00",
+                "execution_date_lte": f"{last.isoformat()}T23:59:59+00:00",
+            },
+            auth=auth,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        if resp.json()["total_entries"]:
+            return False
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM audit.batch_control WHERE business_date = ANY(%s)",
+                (list(business_dates),),
+            )
+            return cur.fetchone()[0] == 0
+
+    return check
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _import_great_expectations_before_any_spark_session():
     """PySpark adds its spark.jars.packages jars to sys.path, and when a session stops it

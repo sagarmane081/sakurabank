@@ -21,9 +21,10 @@ CREATE TABLE IF NOT EXISTS audit.batch_control (
     checksum         VARCHAR(64)
 );
 
--- One lock row per (layer, source_table, business_date): a task INSERTs its batch_id
--- here with ON CONFLICT DO NOTHING to claim the slot before doing any work, which is
--- what prevents two concurrent runs for the same business_date from double-processing.
+-- One live lock row per (layer, source_table, business_date): a task INSERTs a RUNNING
+-- row here to claim the slot before doing any work (see spark_jobs/audit.py
+-- acquire_lock). Under real concurrency this index, not the application's pre-check, is
+-- what stops two runs for the same business_date from double-processing.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_batch_control_lock
     ON audit.batch_control (layer, source_table, business_date)
     WHERE status IN ('RUNNING', 'SUCCESS', 'RECOVERED');

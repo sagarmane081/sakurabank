@@ -7,6 +7,7 @@ import uuid
 from contextlib import contextmanager
 
 import psycopg2
+import psycopg2.errors
 import psycopg2.extras
 
 from spark_jobs.config import audit_dsn
@@ -50,10 +51,12 @@ def acquire_lock(conn, layer: str, source_table: str, business_date: str, dag_ru
     A prior FAILED batch (by any dag_run_id) does NOT hold the lock either, which is what
     lets a rerun-after-failure proceed for a fresh dag_run too.
 
-    Note: the SELECT-then-INSERT below has a small race window between two truly
-    concurrent first-attempts for the same key; acceptable for this project's scale, and
-    the table's UNIQUE constraint still catches that case (as an unhandled
-    UniqueViolation) if it ever happens.
+    Under genuine concurrency the unique index on (layer, source_table, business_date) is
+    the real lock, not the SELECT below: measured over 100 two-thread races, both threads
+    passed the SELECT and the index rejected the second INSERT in 88 of them. The SELECT
+    only decides the sequential cases (skip vs. refuse) and gives a clearer message. A
+    lost race is re-raised as the same "Lock already held" RuntimeError, so an operator
+    reading the task log sees what happened rather than a raw constraint error.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -86,14 +89,22 @@ def acquire_lock(conn, layer: str, source_table: str, business_date: str, dag_ru
                 f"dag_run_id={dag_run_id!r} -- unexpected concurrent execution."
             )
         batch_id = str(uuid.uuid4())
-        cur.execute(
-            """
-            INSERT INTO audit.batch_control
-                (batch_id, dag_run_id, task_id, attempt, layer, source_table, business_date, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 'RUNNING')
-            """,
-            (batch_id, dag_run_id, task_id, attempt, layer, source_table, business_date),
-        )
+        try:
+            cur.execute(
+                """
+                INSERT INTO audit.batch_control
+                    (batch_id, dag_run_id, task_id, attempt, layer, source_table, business_date, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'RUNNING')
+                """,
+                (batch_id, dag_run_id, task_id, attempt, layer, source_table, business_date),
+            )
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            raise RuntimeError(
+                f"Lock already held for (layer={layer}, source_table={source_table}, "
+                f"business_date={business_date}) -- dag_run_id={dag_run_id!r} lost a "
+                f"concurrent race for this slot to another run."
+            ) from None
     conn.commit()
     return batch_id
 

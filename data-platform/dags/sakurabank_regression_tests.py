@@ -4,13 +4,15 @@ the Delta lake), inside this same Airflow environment so it can be triggered and
 pass/fail monitored the same way as any other pipeline run.
 
 Two tasks, deliberately separate:
-  - `regression_suite`: the fast, read-only checks (reconciliation, data quality, audit
-    trail) against the LATEST successful `sakurabank_medallion` run. Safe to run anytime.
-  - `recovery_scenario`: `test_recovery.py`'s live failure-injection/recovery drill. Marked
-    `integration` in pytest.ini (excluded from `regression_suite`'s default run) because it
-    actively triggers new `sakurabank_medallion` DAG runs and takes several minutes -- kept
-    as its own task so a slow/disruptive run doesn't block the fast checks, and so a
-    failure in one doesn't read as a failure in the other.
+  - `regression_suite`: everything not marked `integration` -- checks against the latest
+    clean `sakurabank_medallion` run, plus negative/contract/orchestration tests that
+    write only to their own scratch dates, schemas, and tables. Doesn't touch real
+    business dates, so it's safe to run anytime.
+  - `integration_scenarios`: everything marked `integration` -- the live recovery drill
+    (test_recovery.py) and the backfill test (test_backfill.py). These drive real
+    `sakurabank_medallion` runs and take several minutes each, so they're a separate task:
+    a slow or disruptive run doesn't block the other suite, and a failure in one doesn't
+    read as a failure in the other.
 
 Manually triggered (schedule=None) for now. A natural follow-up is chaining this after
 `sakurabank_medallion` itself (e.g. a TriggerDagRunOperator or Dataset-based schedule) once
@@ -47,8 +49,8 @@ def _run_regression_suite():
     _run_pytest([TESTS_DIR, "-v"])  # pytest.ini's addopts already excludes -m integration
 
 
-def _run_recovery_scenario():
-    _run_pytest([f"{TESTS_DIR}/test_recovery.py", "-v", "-m", "integration"])
+def _run_integration_scenarios():
+    _run_pytest([TESTS_DIR, "-v", "-m", "integration"])
 
 
 with DAG(
@@ -66,9 +68,9 @@ with DAG(
         python_callable=_run_regression_suite,
     )
 
-    recovery_scenario = PythonOperator(
-        task_id="recovery_scenario",
-        python_callable=_run_recovery_scenario,
+    integration_scenarios = PythonOperator(
+        task_id="integration_scenarios",
+        python_callable=_run_integration_scenarios,
     )
 
-    regression_suite >> recovery_scenario
+    regression_suite >> integration_scenarios

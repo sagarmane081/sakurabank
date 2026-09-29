@@ -79,6 +79,9 @@ def run(business_date: str, dag_run_id: str, simulate_failure: str = None) -> li
     try:
         with audit.get_conn() as conn:
             batch_id = audit.acquire_lock(conn, "dq_checks", "sql_checks", business_date, dag_run_id, TASK_ID)
+            if batch_id is None:
+                # Already checked in this run (e.g. a backfill rerun with --reset-dagruns).
+                return results
             try:
                 if simulate_failure == TASK_ID:
                     raise RuntimeError(f"Simulated failure injected for {TASK_ID}")

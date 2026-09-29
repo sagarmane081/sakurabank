@@ -69,6 +69,9 @@ def run(business_date: str, dag_run_id: str, simulate_failure: str = None) -> st
     try:
         with audit.get_conn() as conn:
             batch_id = audit.acquire_lock(conn, "reconcile", "ledger_entries", business_date, dag_run_id, TASK_ID)
+            if batch_id is None:
+                # Already reconciled in this run (e.g. a backfill rerun with --reset-dagruns).
+                return None
             try:
                 if simulate_failure == TASK_ID:
                     raise RuntimeError(f"Simulated failure injected for {TASK_ID}")

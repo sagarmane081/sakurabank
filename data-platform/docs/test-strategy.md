@@ -184,14 +184,37 @@ core-service added would have stopped the pipeline one step after the gate passe
 Fixed by enabling `mergeSchema` on writes, which still rejects incompatible type
 changes (the type-change test guards against loosening too far).
 
+### 9. Backfill, concurrency, and DAG integrity
+
+- `test_orchestration.py` -- the batch lock's semantics (skip own completed work, refuse
+  another run's, allow a new run after failure) and real concurrency: 2 and 8 threads
+  released at once against one slot, exactly one winner every time. Measured over 100
+  two-thread races, the losing thread got past the application's pre-check in 88 of
+  them and was stopped by the database's unique index -- so the index, not the Python
+  check, is the real lock, and a lost race now surfaces as the lock's own clear error
+  rather than a raw constraint violation. Also: DAG integrity (loads cleanly, exact task
+  chain, `max_active_runs=1`, no catchup, retries on every task) and business-day
+  calculation. A static guard fails if any pipeline stage doesn't handle the lock's
+  "already done in this run" case (see below).
+- `test_backfill.py` (integration) -- Airflow's own `dags backfill` over a Friday-Monday
+  range, then the same backfill again with `--reset-dagruns`: each weekday processed
+  exactly once, weekends skipped, business_date equal to the backfilled logical date
+  (for backfill and scheduled runs the logical date is the *start* of the interval,
+  unlike a manual trigger), every processed day reconciled, and the rerun idempotent.
+
+**What this found:** the backfill rerun replays every task after success, a path the
+recovery drill never exercised -- and `reconcile` and the SQL checks didn't handle the
+lock's "already done" result. They redid their work and crashed writing a NULL
+batch_id. Both fixed; the static guard now covers every stage.
+
 ## Coverage matrix
 
 | JD responsibility | Covered by |
 |---|---|
 | Bronze→Silver→Gold correctness | §1, `test_data_quality.py` |
 | Cross-source reconciliation | §2, `test_reconciliation.py` |
-| Job orchestration / scheduling / locking | §3, DAG structure, `audit.batch_control` unique index |
-| Retry / rerun / recovery / backfill | §4, `test_recovery.py` |
+| Job orchestration / scheduling / locking | §3, §9, `test_orchestration.py` |
+| Retry / rerun / recovery / backfill | §4, §9, `test_recovery.py`, `test_backfill.py` |
 | Audit / control / lineage | §5, `test_audit_trail.py` |
 | DQ checks in SQL + Python, CI-repeatable | §6, §7 (`test_bad_data.py`), the `data-platform` job in `.github/workflows/ci.yml` |
 | Code/schema version compatibility (source side) | §8, `test_contract.py` |
@@ -205,4 +228,8 @@ changes (the type-change test guards against loosening too far).
   `entry_type` to balance direction wasn't verified against `Account.java`'s domain
   logic. Asserting it without verifying would risk a confidently-wrong test.
 - Reconciliation has a real extraction-to-reconciliation race window (§2).
-- Backfill has no automated test yet.
+- Backfill is tested for its orchestration mechanics, not historical accuracy: Bronze
+  extracts the source's *current* full snapshot, not the rows as of the backfilled
+  date, so every backfilled day holds the same data. A true point-in-time backfill needs
+  date-scoped extraction and a date-scoped reconciliation source, a redesign rather
+  than a test.

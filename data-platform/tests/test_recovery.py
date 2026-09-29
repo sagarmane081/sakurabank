@@ -71,28 +71,30 @@ def _wait_for_state(base_url, auth, run_id, timeout=600):
     raise TimeoutError(f"dag run {run_id} did not reach a terminal state within {timeout}s")
 
 
-def test_pipeline_recovers_from_injected_failure_without_duplicating_data(pg_conn, airflow_api):
+def _unused_monday(dates_are_unused) -> date:
+    """A past Monday no run has touched. Past, not future: a far-future logical_date
+    (tried 2042 once) gets created but the scheduler never schedules its tasks -- it sits
+    "queued" forever. Searched in random order and checked against Airflow and the audit
+    table, not just picked at random: a single random pick from the ~34 available past
+    Mondays collided with an earlier drill or backfill about 1 run in 5."""
+    first = date(2026, 1, 5)  # first Monday on/after the DAG's start_date
+    candidates = [first + timedelta(weeks=w) for w in range(max(1, (date.today() - first).days // 7 - 4))]
+    random.shuffle(candidates)
+    for monday in candidates:
+        # business_date is data_interval_start, one day BEHIND a manual trigger's
+        # logical_date, so the run for Monday is triggered with Tuesday's logical_date.
+        if dates_are_unused(monday + timedelta(days=1), monday + timedelta(days=1), [monday]):
+            return monday
+    pytest.skip("every candidate Monday has already been used by an earlier run")
+
+
+def test_pipeline_recovers_from_injected_failure_without_duplicating_data(pg_conn, airflow_api, dates_are_unused):
     base_url, auth = airflow_api
-    # A fresh, never-used Monday every run (not a fixed date): Airflow enforces one DAG
-    # run per logical_date, so a hardcoded date collides with itself on every rerun --
-    # this bit us in practice after a few iterations of this test. Random, but
-    # constrained to the PAST (after the DAG's own start_date, and at least a month
-    # before today): a far-future logical_date (tried 2042 once) gets created but the
-    # scheduler never actually schedules its tasks -- it just sits "queued" forever,
-    # for reasons not fully chased down. Past dates have run reliably every time this
-    # was tried, and a past business_date is the realistic backfill/recovery scenario
-    # anyway, not a future one.
-    _first_monday_after_dag_start = date(2026, 1, 5)
-    _weeks_available = max(1, (date.today() - _first_monday_after_dag_start).days // 7 - 4)
-    business_date = _first_monday_after_dag_start + timedelta(weeks=random.randint(0, _weeks_available))
+    business_date = _unused_monday(dates_are_unused)
     business_date_only = business_date.isoformat()
-    # business_date is data_interval_start, which for an @daily schedule is one day
-    # BEHIND the triggered logical_date -- trigger the day after to land business_date
-    # on the intended Monday. Verified against a real run first: triggering AT the
-    # Monday itself actually lands business_date on the preceding Sunday, which
-    # check_business_day correctly skips -- the whole pipeline never runs and the DAG
-    # trivially "succeeds", which is exactly the false pass this comment prevents
-    # regressing to.
+    # Trigger the day after: triggering AT the Monday lands business_date on the preceding
+    # Sunday, which check_business_day skips -- the pipeline never runs and the DAG
+    # trivially "succeeds", the false pass this offset exists to prevent.
     trigger_logical_date = (business_date + timedelta(days=1)).isoformat() + "T00:00:00+00:00"
 
     _set_variable(base_url, auth, "SIMULATE_FAILURE_TASK", FAILING_TASK)
